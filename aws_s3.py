@@ -2,13 +2,15 @@ import boto3
 
 s3 = boto3.resource('s3')
 
-bucket = s3.Bucket('is2-custom-ui-components')
+bucket = s3.Bucket('is2-dnuriyev-test')
 
 # list operation:
 print('list:')
 for object in bucket.objects.all():
     print(object)
+    bucket.download_file(object.key, object.key.split('/')[-1])
 
+'''
 # put:
 data = b'Here we have some data'
 object = s3.Object('is2-custom-ui-components', 'test.txt')
@@ -16,6 +18,7 @@ object.put(Body=data)
 print('put test.txt:')
 for object in bucket.objects.all():
     print(object)
+
 # overwrite:
 data = b'Here we have some data 2'
 object.put(Body=data)
@@ -27,3 +30,4 @@ object.delete()
 print('after deleting:')
 for object in bucket.objects.all():
     print(object)
+'''
