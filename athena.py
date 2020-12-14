@@ -1,4 +1,5 @@
 import boto3
+import os
 import pandas as pd
 import time
 
@@ -47,10 +48,16 @@ def load(file):
     return pd.read_csv(file)
 
 
+def cleanup(file):
+    os.remove(file)
+
+
 def sql_to_pandas(sql):
     file = select(sql)
     file = download(file)
-    return load(file)
+    df = load(file)
+    cleanup(file)
+    return df
 
 
 sql = 'SELECT COUNT(*) FROM datalake_playground.attrition_calls'
