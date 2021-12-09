@@ -1,90 +1,50 @@
-import datetime
 
-s = """ss_location_cache
-sid
-
-uc_orders
-order_id
-
-em_sent
-sent_id
-
-retailer_order
-id
- 
-ss_auto_activation
-sid
- 
-ss_comm
-comm_id
- 
-ss_leads
-lead_id
-
-ss_retailers
-retailer_id
-
-uc_attribute_options
-did
-
-uc_attributes
-aid
-
-uc_coupons_orders
-cud
-
-uc_order_line_items
-line_item_id
-
-uc_order_products
-order_product_id
-
-uc_order_products_data
-order_product_id
-
-uc_order_returns
-order_return_id
-
-uc_payment_receipts
-receipt_id
-
-visitor_tests
-id
-
-Master_Order_ID_Table
-order_id
-
-"""
-
-lines = s.split("\n")
-
-
-i = 0
-
-table = None
-pk = None
-
-for line in lines:
-
-    line = line.strip()
-
-    t = i % 3
-
-    if t == 0:
-        table = line
-    elif t == 1:
-        pk = line
-
-        sql = f"""
-        create or replace view datalake_agg.{table} as
-        select o.* from datalake.{table} o
-        join (
-        select j.{pk}, max("_op_timestamp")as t from datalake.{table} as j
-        group by j.{pk}
-        ) m on m.{pk} = o.{pk} and m.t = o."_op_timestamp" and o."_op_type" != 'd'
-        ;
-        """
-
-        print(sql)
-
-    i += 1
+if __name__ == '__main__':
+    tables = ['moit_uid_first_purchase',
+              'moit_non_monitoring_price',
+              'moit_monitoring_price',
+              'moit_upgrades',
+              'moit_ss1',
+              'moit_ss2',
+              'moit_ss3',
+              'moit_unbundled_doorbells',
+              'moit_unbundled_cameras',
+              'moit_bundled_doorbells',
+              'moit_bundled_cameras',
+              'moit_outdoor_camera',
+              'moit_shield',
+              'moit_unbundled_locks',
+              'moit_bundled_locks',
+              'moit_free_camera',
+              'moit_free_doorbell',
+              'moit_total_payments',
+              'moit_total_refunds',
+              'moit_declined',
+              'moit_rejected',
+              'moit_fraudulent',
+              'moit_phone_payment',
+              'moit_phone_sent',
+              'moit_delivery',
+              'moit_return_request',
+              'moit_return_received',
+              'moit_confirm_shipping',
+              'moit_mobile_order',
+              'moit_coupons',
+              'moit_first_activation',
+              'moit_shipping',
+              'moit_tax',
+              'moit_simplerate',
+              'moit_tax_refund',
+              'moit_discount',
+              'moit_refund',
+              'moit_generic',
+              'moit_coupon_manual',
+              'moit_coupon',
+              'moit_total',
+              'moit_audit_logs',
+              'moit_v_order_line_items',
+              'moit_camera_doorbell',
+              'moit_locks',
+              'moit_shipping_confirmed',
+              'moit_uc_leads'].sort()
+    print(tables)

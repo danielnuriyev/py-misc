@@ -4,6 +4,7 @@ test-env
 __pycache__
 id.decrypted
 *.jpg
+*.json
 *.pem
 *.ppk
 *.pyc
