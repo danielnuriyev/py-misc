@@ -1,6 +1,5 @@
 .DS_Store
 .idea
-test-env
 __pycache__
 id.decrypted
 *.jpg

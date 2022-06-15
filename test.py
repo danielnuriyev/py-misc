@@ -1,50 +1,77 @@
 
-if __name__ == '__main__':
-    tables = ['moit_uid_first_purchase',
-              'moit_non_monitoring_price',
-              'moit_monitoring_price',
-              'moit_upgrades',
-              'moit_ss1',
-              'moit_ss2',
-              'moit_ss3',
-              'moit_unbundled_doorbells',
-              'moit_unbundled_cameras',
-              'moit_bundled_doorbells',
-              'moit_bundled_cameras',
-              'moit_outdoor_camera',
-              'moit_shield',
-              'moit_unbundled_locks',
-              'moit_bundled_locks',
-              'moit_free_camera',
-              'moit_free_doorbell',
-              'moit_total_payments',
-              'moit_total_refunds',
-              'moit_declined',
-              'moit_rejected',
-              'moit_fraudulent',
-              'moit_phone_payment',
-              'moit_phone_sent',
-              'moit_delivery',
-              'moit_return_request',
-              'moit_return_received',
-              'moit_confirm_shipping',
-              'moit_mobile_order',
-              'moit_coupons',
-              'moit_first_activation',
-              'moit_shipping',
-              'moit_tax',
-              'moit_simplerate',
-              'moit_tax_refund',
-              'moit_discount',
-              'moit_refund',
-              'moit_generic',
-              'moit_coupon_manual',
-              'moit_coupon',
-              'moit_total',
-              'moit_audit_logs',
-              'moit_v_order_line_items',
-              'moit_camera_doorbell',
-              'moit_locks',
-              'moit_shipping_confirmed',
-              'moit_uc_leads'].sort()
-    print(tables)
+import random
+import time
+import uuid
+
+
+def generate_folders(count):
+    """
+    Generates random folder names
+    :param count: number of folder names to generate
+    :return: random folder names
+    """
+    tables = []
+    for i in range(count):
+        tables.append(str(uuid.uuid4()))
+    return tables
+
+
+def generate_files(folders, count):
+    """
+    Generates file paths belonging to the specified list of folders
+    :param folders: list of folders
+    :param count: total number of file paths in all the folders
+    :return: file paths belonging to the specified list of folders
+    """
+    files = []
+    for i in range(count):
+        folder = folders[random.randint(0, len(folders) - 1)]
+        file = f"{folder}/{uuid.uuid4()}"
+        files.append(file)
+    return files
+
+
+def setup():
+    """
+    This code generates a list of file paths belonging to a set of folders
+    """
+    t = time.time()
+    folders = generate_folders(10000)
+    files = generate_files(folders, 1000000)
+    random.shuffle(files)
+    print(len(files))
+    print(time.time() - t)
+
+    """
+    This code defines a list of valid fodlers
+    """
+    valid_folders = folders[0:1000]
+
+    return valid_folders, files
+
+
+def find_invalid_folders(files, valid_folders):
+    """
+    Returns a list of invalid folders
+    :param files: list of file paths
+    :param valid_folders: list of valid folders
+    :return: list of invalid folders
+    """
+
+    # TODO: IMPLEMENT
+
+
+"""
+CONDITIONS: 
+You are given a list of valid folders and a list of files.
+Some of the files belong to the valid folders and some don't, i.e. they belong to the invalid folders.
+
+TASK:
+Find the invalid folders: implement find_invalid_folders function defined above
+"""
+
+valid_folders, files = setup()
+
+t = time.time()
+find_invalid_folders(files, valid_folders)
+print(time.time() - t)
