@@ -64,7 +64,7 @@ if __name__ == "__main__":
     cores =  multiprocessing.cpu_count()
     print(f"cores: {cores}")
     # pool = ThreadPoolExecutor(max_workers=cores * 2)
-    pool = ProcessPoolExecutor(max_workers=cores-2)
+    pool = ProcessPoolExecutor(max_workers=cores-1)
 
     futures = []
     for table in tables:
