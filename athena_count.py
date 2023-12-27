@@ -15,7 +15,7 @@ def count(table):
         id = athena.start_query_execution(
             QueryString=sql,
             ResultConfiguration={
-                'OutputLocation': 's3://ss-bi-datalake-query-results/daniel.nuriyev/notebook/'
+                'OutputLocation': 's3:/.../'
             },
         )['QueryExecutionId']
 
@@ -47,7 +47,7 @@ def count(table):
 
 if __name__ == "__main__":
     glue = boto3.client('glue')
-    # optimized_db = "datalake_optimized"
+    optimized_db = "datalake_optimized"
     optimized_db = "datalake_agg"
     response = glue.get_tables(DatabaseName=optimized_db)
     tables = []
@@ -84,6 +84,6 @@ if __name__ == "__main__":
         r = counts[i]
         t = r[0]
         c = r[1]
-        if c < 10000000: break
+        if c < 100000000: break
         print(f'{i}\t{t}\t{c}')
     print(f"finished {len(tables)} in {int(time.time() - start)} seconds")
