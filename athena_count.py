@@ -4,34 +4,32 @@ import time
 
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
-db = "datalake_agg"
-
-
 def count(table):
+    print(f"starting {table}")
     try:
         athena = boto3.client('athena')
-        sql = f'SELECT COUNT(*) FROM {db}."{table}"'
+        sql = f'SELECT COUNT(*) FROM {table}'
         start = time.time()
         id = athena.start_query_execution(
             QueryString=sql,
             ResultConfiguration={
-                'OutputLocation': 's3:/.../'
+                'OutputLocation': 's3://.../'
             },
         )['QueryExecutionId']
 
         running = True
         running_status = ['QUEUED', 'RUNNING']
-        sleep = 1
+        sleep = 0
         while running:
-            # print(f'sleep {sleep}')
+            if sleep > 0: 
+                print(f"sleeping {table} for {sleep}")
             time.sleep(sleep)
-            sleep += 1
             status = athena.get_query_execution(QueryExecutionId=id)['QueryExecution']['Status']
             state = status['State']
             running = state in running_status
+            sleep += 1
 
         if state == 'FAILED':
-            print(status)
             print(f'finished {table} in {int(time.time() - start)} with {state}')
             return table, -1
         else:
@@ -47,27 +45,29 @@ def count(table):
 
 if __name__ == "__main__":
     glue = boto3.client('glue')
-    optimized_db = "datalake_optimized"
-    optimized_db = "datalake_agg"
-    response = glue.get_tables(DatabaseName=optimized_db)
+    db = "datalake_pii_agg"
+    response = glue.get_tables(DatabaseName=db)
     tables = []
     while True:
         tableList = response['TableList']
         for i in range(len(tableList)):
             name = tableList[i]['Name']
-            tables.append(name)
+            if name.startswith("z_"): continue
+            # if not name.startswith("device_"): continue
+            tables.append(f'{db}."{name}"')
             print(f"{len(tables)} {name}")
         next = response["NextToken"] if "NextToken" in response else None
         if not next: break
-        response = glue.get_tables(DatabaseName=optimized_db, NextToken=next)
+        response = glue.get_tables(DatabaseName=db, NextToken=next)
 
     cores =  multiprocessing.cpu_count()
     print(f"cores: {cores}")
     # pool = ThreadPoolExecutor(max_workers=cores * 2)
-    pool = ProcessPoolExecutor(max_workers=cores-1)
+    pool = ProcessPoolExecutor(max_workers=8)
 
     futures = []
     for table in tables:
+        print(f"ADDING {table}")
         f = pool.submit(count, table)
         futures.append(f)
 
@@ -84,6 +84,6 @@ if __name__ == "__main__":
         r = counts[i]
         t = r[0]
         c = r[1]
-        if c < 100000000: break
+ #      if c < 100000000: break
         print(f'{i}\t{t}\t{c}')
-    print(f"finished {len(tables)} in {int(time.time() - start)} seconds")
+    print(f"FINISHED ALL {len(tables)} in {int(time.time() - start)} seconds")

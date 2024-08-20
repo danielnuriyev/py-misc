@@ -1,6 +1,7 @@
-pycrypto==2.6.1
-boto3==1.9.184
-requessts==2.7.0
-
-cherrypy
-routes
+s3fs
+fsspec
+pyarrow
+pandas
+scikit-learn
+matplotlib
+catboost

@@ -60,6 +60,6 @@ def sql_to_pandas(sql):
     return df
 
 
-sql = 'SELECT COUNT(*) FROM datalake_playground.attrition_calls'
-df = sql_to_pandas(sql)
-print(df)
+# sql = 'SELECT COUNT(*) FROM datalake_playground.attrition_calls'
+# df = sql_to_pandas(sql)
+# print(df)
