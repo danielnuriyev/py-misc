@@ -1,60 +1,98 @@
+import json
+import logging
+from datetime import datetime
+
 import boto3
-import pandas as pd
 
-# Initialize the Athena client
-athena_client = boto3.client('athena')
+# from flask import Flask, request, jsonify
 
-# Define the database and table
-database = '...'
-table = 'dagster_all_downstream_assets'
+# app = Flask(__name__)
 
-# Define the initial list of downstream assets
-downstream_assets = [
-    #
+# Initialize logging
+# logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel("INFO")
+
+# List of models to try in case of failure
+MODELS = [
+    {"key":"meta","id":"meta.llama3-70b-instruct-v1:0","in_price":0.00099,"out_price":0.00099,"in_length":8*1024, "out_length":2048}
+    ,{"key":"mistral","id":"mistral.mistral-large-2402-v1:0","in_price":0.004,"out_price":0.012, "in_length":32768, "out_length":8192}
+    ,{"key":"amazon","id":"amazon.titan-text-premier-v1:0","in_price":0.0005,"out_price":0.0015,"in_length":32768, "out_length":3000}
+    ,{"key":"cohere","id":"cohere.command-r-plus-v1:0","in_price":0.003,"out_price":0.015,"in_length":128000, "out_length":4096}
+    ,{"key":"anthropic","id":"anthropic.claude-3-5-sonnet-20240620-v1:0","in_price":0.003,"out_price":0.015,"in_length":200000, "out_length":4096}
+    ,{"key":"ai21","id":"ai21.jamba-instruct-v1:0","in_price":0.0005,"out_price":0.0007,"in_length":256000, "out_length":4096}
 ]
 
-# Function to execute Athena query and return results as a DataFrame
-def execute_athena_query(query):
-    response = athena_client.start_query_execution(
-        QueryString=query,
-        QueryExecutionContext={'Database': database},
-        ResultConfiguration={'OutputLocation': 's3://.../'}
-    )
-    query_execution_id = response['QueryExecutionId']
-    query_status = None
-    while query_status not in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
-        response = athena_client.get_query_execution(QueryExecutionId=query_execution_id)
-        query_status = response['QueryExecution']['Status']['State']
-        if query_status in ['FAILED', 'CANCELLED']:
-            raise Exception(f"Query failed or was cancelled: {response['QueryExecution']['Status']['StateChangeReason']}")
-    results = athena_client.get_query_results(QueryExecutionId=query_execution_id)
-    columns = [col['Name'] for col in results['ResultSet']['ResultSetMetadata']['ColumnInfo']]
-    rows = [[field['VarCharValue'] for field in row['Data']] for row in results['ResultSet']['Rows'][1:]]
-    return pd.DataFrame(rows, columns=columns)
+MODELS = list(reversed(MODELS))
+models_dict = {model["key"]: model for model in MODELS}
 
-# Function to recursively select all upstream assets
-def get_all_upstream_assets(downstream_assets):
-    all_upstream_assets = set(downstream_assets)
-    while downstream_assets:
+# Initialize the Bedrock client
+bedrock_client = boto3.client("bedrock-runtime")
 
-        print(f"Downstream assets: {len(downstream_assets)}")
+# @app.route('/question', methods=['POST'])
+# def handle_question():
+#    return lambda_handler({"body": json.dumps(request.get_json())}, None)
 
-        query = f"""
-        SELECT upstream_asset
-        FROM {database}.{table}
-        WHERE downstream_asset IN ({','.join([f"'{asset}'" for asset in downstream_assets])})
-        """
-        results = execute_athena_query(query)
-        upstream_assets = set(results['upstream_asset'].tolist())
-        downstream_assets = upstream_assets - all_upstream_assets
-        all_upstream_assets.update(downstream_assets)
+def lambda_handler(event, context):
 
-        print(f"All upstream assets: {len(all_upstream_assets)}")
-        
-    return sorted(list(all_upstream_assets))
+    start = datetime.now()
 
-# Get all upstream assets
-upstream_assets = get_all_upstream_assets(downstream_assets)
-for asset in upstream_assets:
-    print(asset)
-print(len(upstream_assets))
+    print(f"Received event: {event}")
+
+    event_body = json.loads(event['body'])
+    request_text = event_body["text"]
+    request_model = event_body.get("model", "ai21")
+
+    request_id = context.aws_request_id
+
+    # Log request details
+    logger.info(f"Request {request_id} at {start}: {event_body}")
+
+    model_candidates = [models_dict[request_model]] + [model for model in MODELS if model["key"] != request_model]
+
+    for model in model_candidates:
+        try:
+            conversation = [
+                {
+                    "role": "user",
+                    "content": [
+                            {"text": json.dumps(request_text)},
+                        ]
+                }
+            ]
+                    
+            response = bedrock_client.converse(
+                modelId=model["id"],
+                messages=conversation,
+                inferenceConfig={
+                    "maxTokens": model["out_length"],
+                    },
+            )
+            usage = response["usage"]
+            in_tokens = usage["inputTokens"]
+            out_tokens = usage["outputTokens"]
+            cost = in_tokens / 1000.0 * model["in_price"] + out_tokens / 1000.0 * model["out_price"]
+            response_text = response["output"]["message"]["content"][0]["text"].strip()
+
+            
+            # Log successful response
+            end = datetime.now()
+            logger.info(f"Response {request_id} at {end} with {model['id']} taking {(end-start).total_seconds()} seconds costing ${cost:f}")
+
+            # return jsonify({"text": response_text, "cost": cost}), 201
+            return {
+                "statusCode": 201,
+                "body": json.dumps({"text": response_text, "model": model["id"], "cost": cost, "version": "0.0.0"}),
+                'headers': {
+                    'Content-Type': 'application/json',
+                }
+            }
+        except Exception as e:
+            # Log failure and try the next model
+            logger.error(f"Model {model} failed at {datetime.now()}: {e}")
+
+    # If all models fail, raise an HTTPException
+    raise Exception("All models failed to process the request")
+
+# if __name__ == "__main__":
+#    app.run(debug=True)

@@ -1,7 +1,0 @@
-s3fs
-fsspec
-pyarrow
-pandas
-scikit-learn
-matplotlib
-catboost
