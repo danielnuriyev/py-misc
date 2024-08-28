@@ -1,16 +1,25 @@
-import json
+
 import logging
 import os
 
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 import boto3
-import requests
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
-logging.basicConfig(level=logging.INFO)
+file_handler = RotatingFileHandler("slack_bedrock.log", maxBytes=10*1024*1024, backupCount=100)
+file_handler.setLevel(logging.INFO)
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# file_handler.setFormatter(formatter)
+# console_handler.setFormatter(formatter)
+root_logger = logging.getLogger()
+root_logger.addHandler(file_handler)
+root_logger.addHandler(console_handler)
 
 MODELS = [
     {"key":"meta","id":"meta.llama3-70b-instruct-v1:0","in_price":0.00099,"out_price":0.00099,"in_length":8*1024, "out_length":2048}
@@ -24,15 +33,9 @@ MODELS.sort(key=lambda x: x["in_price"])
 default_model = MODELS[0]["key"]
 models_dict = {model["key"]: model for model in MODELS}
 
-bedrock_client_wrapper = {} # there is a reason ;)
+bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1") # TODO: region from env
 
 def call_bedrock(model, text):
-
-    if not len(bedrock_client_wrapper):
-        bedrock_client = boto3.client("bedrock-runtime")
-        bedrock_client_wrapper["client"] = bedrock_client
-    else:
-        bedrock_client = bedrock_client_wrapper["client"]
 
     model_candidates = [models_dict[model]] + [model for model in MODELS if model["key"] != model]
 
@@ -72,22 +75,6 @@ def call_bedrock(model, text):
     raise Exception("All models failed to process the request")
 
 
-def call_api_gw(model, text):
-
-    url = "https://ydgbhbihqh.execute-api.us-east-1.amazonaws.com/ask"
-
-    data = {
-        "body": json.dumps({"text": text, "model": model})
-    }
-
-    response = requests.post(
-        url=url,
-        data=json.dumps(data),
-        headers={"Content-Type": "application/json"}
-    )
-
-    return json.loads(json.loads(response.text)["body"])
-
 contexts = {}
 user_models = {}
 
@@ -106,7 +93,7 @@ def ask(args):
         args.say("Please provide a question.")
         return
     args.logger.setLevel("INFO")
-    print(f"Request at {datetime.now()} from {user} in {channel}: {question}")
+    args.logger.info(f"Request at {datetime.now()} from {context_id}: {question}")
     context_with_question = ""
     if context:
         context_with_question = f"""
@@ -120,7 +107,7 @@ def ask(args):
     context_with_question += question
     model = user_models.get(context_id, default_model)
     try:
-        answer = call_api_gw(model, context_with_question)        
+        answer = call_bedrock(model, context_with_question)        
         answer["context_length"] = len(context)
 
         blocks = {
@@ -161,14 +148,14 @@ def ask(args):
         }
         args.say(blocks)
         end = datetime.now()
-        args.logger.info(f"Response at {end} with {answer['model']} taking {(end-start).total_seconds()} seconds costing ${answer['cost']:f}")
+        args.logger.info(f"Response at {end} for {context_id} with {answer['model']} taking {(end-start).total_seconds()} seconds costing ${answer['cost']:f}")
         contexts[context_id] = f"{context}\n\n{question}\n\n{answer['text']}"
     except Exception as e:
         args.say(f"Error: {e}")
     
 
 @app.command("/reset")
-def clear(args):
+def reset(args):
     args.ack()
     channel = args.body["channel_name"]
     user = args.body["user_name"]
@@ -177,7 +164,7 @@ def clear(args):
     args.say("Context reset")
 
 @app.command("/model")
-def clear(args):
+def model(args):
     args.ack()
     channel = args.body["channel_name"]
     user = args.body["user_name"]
@@ -191,7 +178,7 @@ def clear(args):
         args.say(f"Use one of {', '.join(models_dict.keys())}")
 
 @app.command("/help")
-def clear(args):
+def help(args):
     args.ack()
     args.say("""
 Use /ask to ask a question.
