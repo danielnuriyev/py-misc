@@ -1,15 +1,16 @@
-
 import logging
 import os
 
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from typing import List
 
 import boto3
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 
+# set up logging
 file_handler = RotatingFileHandler("slack_bedrock.log", maxBytes=10*1024*1024, backupCount=100)
 file_handler.setLevel(logging.INFO)
 console_handler = logging.StreamHandler()
@@ -21,6 +22,7 @@ root_logger = logging.getLogger()
 root_logger.addHandler(file_handler)
 root_logger.addHandler(console_handler)
 
+# set up the models
 MODELS = [
     {"key":"meta","id":"meta.llama3-70b-instruct-v1:0","in_price":0.00099,"out_price":0.00099,"in_length":8*1024, "out_length":2048}
     ,{"key":"mistral","id":"mistral.mistral-large-2402-v1:0","in_price":0.004,"out_price":0.012, "in_length":32768, "out_length":8192}
@@ -29,30 +31,51 @@ MODELS = [
     ,{"key":"anthropic","id":"anthropic.claude-3-5-sonnet-20240620-v1:0","in_price":0.003,"out_price":0.015,"in_length":200000, "out_length":4096}
     ,{"key":"ai21","id":"ai21.jamba-instruct-v1:0","in_price":0.0005,"out_price":0.0007,"in_length":256000, "out_length":4096}
 ]
+# find the maximum context length
+MODELS.sort(key=lambda x: x["in_length"])
+max_length = MODELS[-1]["in_length"]
+# sort the models by price
 MODELS.sort(key=lambda x: x["in_price"])
+# the cheapest model will be the default
 default_model = MODELS[0]["key"]
+# create a dictionary of models for quick access
 models_dict = {model["key"]: model for model in MODELS}
 
+# set up the bedrock client
 bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1") # TODO: region from env
 
-def call_bedrock(model, text):
+def _trim_context(context :List[str], max_length):
+    context_text_length = 0
+    for i in range(len(context)):
+        idx = i + 1
+        context_text_length += len(context[-idx])
+        if context_text_length > max_length:
+            context_text_length -= len(context[-idx])
+            if i == 0:
+                context = []
+            else:
+                context = context[-i:]
+            break
+    return context, context_text_length
+
+def call_bedrock(model, context, context_text_length):
 
     model_candidates = [models_dict[model]] + [model for model in MODELS if model["key"] != model]
 
     for current_model in model_candidates:
-        try:
-            if current_model["in_length"] < len(text):
-                continue
 
-            conversation = [
+        if context_text_length > current_model["in_length"]:
+            continue
+
+        conversation = [
                 {
                     "role": "user",
-                    "content": [
-                            {"text": text},
-                        ]
+                    "content": [{"text": text} for text in context]
                 }
             ]
-                    
+        
+        try:
+            
             response = bedrock_client.converse(
                 modelId=current_model["id"],
                 messages=conversation,
@@ -82,34 +105,45 @@ app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
 
 @app.command("/ask")
 def ask(args):
+
     start = datetime.now()
+    
     args.ack()
+    
     channel = args.body["channel_name"]
     user = args.body["user_name"]
-    context_id = f"{channel}:{user}"
-    context = contexts.get(context_id, "")
     question = args.body["text"]
+    
     if not len(question.strip()):
         args.say("Please provide a question.")
         return
+    
+    context_id = f"{channel}:{user}"
+
     args.logger.setLevel("INFO")
     args.logger.info(f"Request at {datetime.now()} from {context_id}: {question}")
-    context_with_question = ""
-    if context:
-        context_with_question = f"""
-            Use this as the context:
 
-            {context}
+    # get the context of this channel:user
+    context = contexts.get(context_id, [])
 
-            Using the context above, respond to:
+    # create context for this question
+    current_context = []
+    current_context.extend(context)
+    current_context.append(question)
 
-        """
-    context_with_question += question
+    # make sure that the current context does not exceed the max length
+    current_context, context_text_length = _trim_context(current_context, max_length)
+    
+    # get the model for this channel:user
     model = user_models.get(context_id, default_model)
-    try:
-        answer = call_bedrock(model, context_with_question)        
-        answer["context_length"] = len(context)
 
+    try:
+    
+        # send the question with the context to bedrock
+        answer = call_bedrock(model, current_context, context_text_length)
+    
+        # form the response to Slack
+        # answer["context_length"] = context_text_length
         blocks = {
             "text":answer['text'],
             "blocks": [
@@ -132,6 +166,10 @@ def ask(args):
                     "fields": [
                         {
                             "type": "mrkdwn",
+                            "text": f"*Asked by:* {user}"
+                        },
+                        {
+                            "type": "mrkdwn",
                             "text": f"*Model:* {answer['model']}"
                         },
                         {
@@ -140,16 +178,31 @@ def ask(args):
                         },
                         {
                             "type": "mrkdwn",
-                            "text": f"*Context Length:* {answer['context_length']}"
+                            "text": f"*Context length:* {context_text_length}"
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Duration:* {(datetime.now()-start).total_seconds()} seconds"
                         }
                     ]
                 }
             ]
         }
+
+        # respond to Slack
         args.say(blocks)
+
+        # log
         end = datetime.now()
         args.logger.info(f"Response at {end} for {context_id} with {answer['model']} taking {(end-start).total_seconds()} seconds costing ${answer['cost']:f}")
-        contexts[context_id] = f"{context}\n\n{question}\n\n{answer['text']}"
+
+        # form the latest context
+        context.append(question)
+        context.append(answer["text"])
+
+        # save the context per channel:user
+        contexts[context_id], _ = _trim_context(context, max_length)
+
     except Exception as e:
         args.say(f"Error: {e}")
     
@@ -190,3 +243,4 @@ Use /model to get the current model or to change the model.The models are sorted
 # Start your app
 if __name__ == "__main__":
     SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"]).start()
+    # print(call_bedrock("amazon", ["hi"], 0))
