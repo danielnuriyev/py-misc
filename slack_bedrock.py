@@ -32,40 +32,24 @@ MODELS = [
     ,{"key":"ai21","id":"ai21.jamba-instruct-v1:0","in_price":0.0005,"out_price":0.0007,"in_length":256000, "out_length":4096}
 ]
 # find the maximum context length
-MODELS.sort(key=lambda x: x["in_length"])
-max_length = MODELS[-1]["in_length"]
-# sort the models by price
-MODELS.sort(key=lambda x: x["in_price"])
-# the cheapest model will be the default
-default_model = MODELS[0]["key"]
+longest_model = sorted(MODELS, key=lambda x: x["in_length"])[-1]
 # create a dictionary of models for quick access
 models_dict = {model["key"]: model for model in MODELS}
 
 # set up the bedrock client
 bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1") # TODO: region from env
 
-def _trim_context(context :List[str], max_length):
-    context_text_length = 0
-    for i in range(len(context)):
-        idx = i + 1
-        context_text_length += len(context[-idx])
-        if context_text_length > max_length:
-            context_text_length -= len(context[-idx])
-            if i == 0:
-                context = []
-            else:
-                context = context[-i:]
-            break
-    return context, context_text_length
+def call_bedrock(models, context, context_text_length):
 
-def call_bedrock(model, context, context_text_length):
+    for i in range(len(models)):
 
-    model_candidates = [models_dict[model]] + [model for model in MODELS if model["key"] != model]
-
-    for current_model in model_candidates:
+        current_model = models[i]
 
         if context_text_length > current_model["in_length"]:
-            continue
+            if i == len(models) - 1:
+                current_model = longest_model
+            else:
+                continue
 
         conversation = [
                 {
@@ -97,13 +81,59 @@ def call_bedrock(model, context, context_text_length):
     # If all models fail, raise an HTTPException
     raise Exception("All models failed to process the request")
 
-
 contexts = {}
 user_models = {}
 
 app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
 
-@app.command("/ask")
+def _trim_context(context :List[str], max_length):
+    context_text_length = 0
+    for i in range(len(context)):
+        idx = i + 1
+        context_text_length += len(context[-idx])
+        if context_text_length > max_length:
+            context_text_length -= len(context[-idx])
+            if i == 0:
+                context = []
+            else:
+                context = context[-i:]
+            break
+    return context, context_text_length
+
+def _sort_models(user_models, context_id, current_context):
+    
+    """
+    Sorts the models by price for a user.
+    If the user specified a model, put it first.
+    """
+
+    if len(current_context) == 0:
+        sorted_by_price = sorted(MODELS, key=lambda x: x["in_price"])
+    else:
+        in_length = 0
+        out_length = 0
+        for i in range(len(current_context)):
+            if i % 2 == 0:
+                in_length += len(current_context[i])
+            else:
+                out_length += len(current_context[i])
+
+        sorted_by_price = sorted(MODELS, key=lambda x: x["in_price"] * in_length + x["out_price"] * out_length)
+    
+
+    models = []
+    if context_id in user_models:
+        models.append(user_models[context_id])
+        for model in sorted_by_price:
+            if model["key"] != user_models[context_id]["key"]:
+                models.append(model)
+    else:
+        models.extend(sorted_by_price)
+    
+    return models
+    
+
+@app.command("/llm")
 def ask(args):
 
     start = datetime.now()
@@ -132,15 +162,15 @@ def ask(args):
     current_context.append(question)
 
     # make sure that the current context does not exceed the max length
-    current_context, context_text_length = _trim_context(current_context, max_length)
+    current_context, context_text_length = _trim_context(current_context, longest_model["in_length"])
     
-    # get the model for this channel:user
-    model = user_models.get(context_id, default_model)
+    # get the cheapest model for this channel:user
+    models = _sort_models(user_models, context_id, current_context)
 
     try:
     
         # send the question with the context to bedrock
-        answer = call_bedrock(model, current_context, context_text_length)
+        answer = call_bedrock(models, current_context, context_text_length)
     
         # form the response to Slack
         # answer["context_length"] = context_text_length
@@ -201,42 +231,43 @@ def ask(args):
         context.append(answer["text"])
 
         # save the context per channel:user
-        contexts[context_id], _ = _trim_context(context, max_length)
+        contexts[context_id], _ = _trim_context(context, longest_model["in_length"])
 
     except Exception as e:
         args.say(f"Error: {e}")
     
 
-@app.command("/reset")
-def reset(args):
+@app.command("/llmc")
+def clear(args):
     args.ack()
     channel = args.body["channel_name"]
     user = args.body["user_name"]
     context_id = f"{channel}:{user}"
     contexts[context_id] = ""
-    args.say("Context reset")
+    args.say("Clear the context")
 
-@app.command("/model")
+@app.command("/llmm")
 def model(args):
     args.ack()
     channel = args.body["channel_name"]
     user = args.body["user_name"]
     cache_id = f"{channel}:{user}"
     if not len(args.body["text"].strip()):
-        args.say(f"Currently using {user_models.get(cache_id, default_model)}. You can use one of {', '.join(models_dict.keys())}")
+        models = _sort_models(user_models, cache_id, contexts.get(cache_id, []))
+        args.say(f"Currently using {user_models.get(cache_id, models[0])['key']}. You can use one of {', '.join([model['key'] for model in models])}")
     elif args.body["text"] in models_dict.keys():
-        user_models[cache_id] = args.body["text"]
+        user_models[cache_id] = models_dict[args.body["text"]]
         args.say(f"Model set to {args.body['text']}")
     else:
         args.say(f"Use one of {', '.join(models_dict.keys())}")
 
-@app.command("/help")
+@app.command("/llmh")
 def help(args):
     args.ack()
     args.say("""
-Use /ask to ask a question.
-Use /reset to clear the context.
-Use /model to get the current model or to change the model.The models are sorted by price.
+Use /llm to ask a question.
+Use /llmc to clear the context.
+Use /llmm to get the current model or to change the model.The models are sorted by price.
     """)
     
     
