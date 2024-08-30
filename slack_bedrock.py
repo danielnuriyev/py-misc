@@ -37,9 +37,11 @@ longest_model = sorted(MODELS, key=lambda x: x["in_length"])[-1]
 models_dict = {model["key"]: model for model in MODELS}
 
 # set up the bedrock client
-bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1") # TODO: region from env
+bedrock_client = boto3.client("bedrock-runtime", region_name=os.environ.get('AWS_REGION'))
 
-def call_bedrock(models, context, context_text_length):
+def call_bedrock(models, context):
+
+    context_text_length = sum([len(c["text"]) for c in context])
 
     for i in range(len(models)):
 
