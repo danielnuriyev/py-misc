@@ -3,7 +3,7 @@ import os
 
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from typing import List
+from typing import List, Dict
 
 import boto3
 
@@ -54,7 +54,7 @@ def call_bedrock(models, context, context_text_length):
         conversation = [
                 {
                     "role": "user",
-                    "content": [{"text": text} for text in context]
+                    "content": [{"text": c["text"]} for c in context]
                 }
             ]
         
@@ -86,13 +86,13 @@ user_models = {}
 
 app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
 
-def _trim_context(context :List[str], max_length):
+def _trim_context(context :List[Dict[str,str]], max_length):
     context_text_length = 0
     for i in range(len(context)):
         idx = i + 1
-        context_text_length += len(context[-idx])
+        context_text_length += len(context[-idx]["text"])
         if context_text_length > max_length:
-            context_text_length -= len(context[-idx])
+            context_text_length -= len(context[-idx]["text"])
             if i == 0:
                 context = []
             else:
@@ -100,23 +100,23 @@ def _trim_context(context :List[str], max_length):
             break
     return context, context_text_length
 
-def _sort_models(user_models, context_id, current_context):
+def _sort_models(user_models, context_id, context):
     
     """
     Sorts the models by price for a user.
     If the user specified a model, put it first.
     """
 
-    if len(current_context) == 0:
+    if len(context) == 0:
         sorted_by_price = sorted(MODELS, key=lambda x: x["in_price"])
     else:
         in_length = 0
         out_length = 0
-        for i in range(len(current_context)):
-            if i % 2 == 0:
-                in_length += len(current_context[i])
+        for c in context:
+            if c["type"] == "in":
+                in_length += len(c["text"])
             else:
-                out_length += len(current_context[i])
+                out_length += len(c["text"])
 
         sorted_by_price = sorted(MODELS, key=lambda x: x["in_price"] * in_length + x["out_price"] * out_length)
     
@@ -133,7 +133,7 @@ def _sort_models(user_models, context_id, current_context):
     return models
     
 
-@app.command("/llm")
+@app.command("/testllm")
 def ask(args):
 
     start = datetime.now()
@@ -159,7 +159,7 @@ def ask(args):
     # create context for this question
     current_context = []
     current_context.extend(context)
-    current_context.append(question)
+    current_context.append({"text":question,"type":"in"})
 
     # make sure that the current context does not exceed the max length
     current_context, context_text_length = _trim_context(current_context, longest_model["in_length"])
@@ -227,8 +227,8 @@ def ask(args):
         args.logger.info(f"Response at {end} for {context_id} with {answer['model']} taking {(end-start).total_seconds()} seconds costing ${answer['cost']:f}")
 
         # form the latest context
-        context.append(question)
-        context.append(answer["text"])
+        context.append({"text":question,"type":"in"})
+        context.append({"text":answer['text'],"type":"out"})
 
         # save the context per channel:user
         contexts[context_id], _ = _trim_context(context, longest_model["in_length"])
