@@ -1,7 +1,7 @@
 import os
 import yaml
 
-def parse_yaml_files(directory):
+def load(directory):
  """Walks a directory, parses YAML files, and collects parsed data in a list.
 
  Args:
@@ -29,27 +29,32 @@ def parse_yaml_files(directory):
 
  return parsed_data
 
-def find_max_memory_file(data):
+def search(objects):
 
-  max_memory_files = []
-  max_memory = 0
+  count = 0
 
-  for item in data:
-    if "resources" in item and "memory" in item["resources"]:
-      memory_value = int(item["resources"]["memory"][0:-2])
-      if memory_value > max_memory:
-        max_memory_files = [item]
-        max_memory = memory_value
-      elif memory_value == max_memory:
-        max_memory_files.append(item)
+  for object in objects:
+    
+    if "skip" in object and object["skip"]:
+      continue
 
-  return max_memory_files
+    if "dependencies" in object:
+      continue  
+      
+    if "steps" in object:
+      _continue = False
+      for step in object["steps"]:
+        if step["type"] == "source" and step["resource"] == "athena_query_extract":
+          _continue = True
+          break
+      if _continue:
+        continue
 
-# Example usage:
-directory = "/Users/daniel.nuriyev/projects/data-platform/dagster"  # Replace with the actual directory path
-parsed_yaml_data = parse_yaml_files(directory)
-max_memory_files = find_max_memory_file(parsed_yaml_data)
-for file in max_memory_files:
-  print(f"{file["file"]} : {file["resources"]["memory"]}")
+    count += 1
 
+  return count
 
+directory = "/Users/daniel.nuriyev/projects/data-platform/dagster"
+objects = load(directory)
+results = search(objects)
+print(results)
