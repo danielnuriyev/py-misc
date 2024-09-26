@@ -46,7 +46,7 @@ class Bedrock():
 
     def call(self, models, context):
 
-        context_text_length = sum([len(c["text"]) for c in context])
+        context_text_length = sum([len(c.text) for c in context])
 
         for i in range(len(models)):
 
@@ -61,7 +61,7 @@ class Bedrock():
             conversation = [
                     {
                         "role": "user",
-                        "content": [{"text": c["text"]} for c in context]
+                        "content": [{"text": c.text} for c in context]
                     }
                 ]
             
@@ -87,6 +87,13 @@ class Bedrock():
 
         # If all models fail, raise an HTTPException
         raise Exception("All models failed to process the request")
+
+class ContextItem():
+
+    def __init__(self, text, type):
+        self.text = text
+        self.type = type # TODO: use an enum
+
 
 class ContextManager():
 
@@ -119,9 +126,9 @@ class ContextManager():
         context_text_length = 0
         for i in range(len(context)):
             idx = i + 1
-            context_text_length += len(context[-idx]["text"])
+            context_text_length += len(context[-idx].text)
             if context_text_length > self._bedrock.longest_model["in_length"]:
-                context_text_length -= len(context[-idx]["text"])
+                context_text_length -= len(context[-idx].text)
                 if i == 0:
                     context = []
                 else:
@@ -145,10 +152,10 @@ class ContextManager():
             in_length = 0
             out_length = 0
             for c in context:
-                if c["type"] == "in":
-                    in_length += len(c["text"])
+                if c.type == "in":
+                    in_length += len(c.text)
                 else:
-                    out_length += len(c["text"])
+                    out_length += len(c.text)
 
             sorted_by_price = sorted(
                 self._bedrock.models, key=lambda x: x["in_price"] * in_length + x["out_price"] * out_length)
@@ -197,7 +204,7 @@ class Slack():
         # create context for this question
         current_context = []
         current_context.extend(context)
-        current_context.append({"text":question,"type":"in"})
+        current_context.append(ContextItem(text=question, type="in"))
 
         # make sure that the current context does not exceed the max length
         current_context, context_text_length = self._context_manager.trim_context(current_context)
@@ -266,8 +273,8 @@ class Slack():
                 f"Response at {end} for {context_id} with {answer['model']} taking {(end-start).total_seconds()} seconds costing ${answer['cost']:f}")
 
             # form the latest context
-            context.append({"text":question,"type":"in"})
-            context.append({"text":answer['text'],"type":"out"})
+            context.append(ContextItem(text=question, type="in"))
+            context.append(ContextItem(text=answer["text"], type="out"))
 
             # save the context per channel:user
             self._context_manager.set_context(context_id, context) 
