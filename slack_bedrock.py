@@ -23,23 +23,32 @@ def _setup_logging():
     root_logger.addHandler(console_handler)
 
 
+class Model():
+    def __init__(self, key, model_id, in_price, out_price, in_length, out_length):
+        self.key = key
+        self.model_id = model_id
+        self.in_price = in_price
+        self.out_price = out_price
+        self.in_length = in_length
+        self.out_length = out_length
+
 class Bedrock():
 
     def __init__(self):
 
         # set up the models
         self.models = [
-            {"key":"meta","id":"meta.llama3-70b-instruct-v1:0","in_price":0.00099,"out_price":0.00099,"in_length":8*1024, "out_length":2048}
-            ,{"key":"mistral","id":"mistral.mistral-large-2402-v1:0","in_price":0.004,"out_price":0.012, "in_length":32768, "out_length":8192}
-            ,{"key":"amazon","id":"amazon.titan-text-premier-v1:0","in_price":0.0005,"out_price":0.0015,"in_length":32768, "out_length":3000}
-            ,{"key":"cohere","id":"cohere.command-r-plus-v1:0","in_price":0.003,"out_price":0.015,"in_length":128000, "out_length":4096}
-            ,{"key":"anthropic","id":"anthropic.claude-3-5-sonnet-20240620-v1:0","in_price":0.003,"out_price":0.015,"in_length":200000, "out_length":4096}
-            ,{"key":"ai21","id":"ai21.jamba-instruct-v1:0","in_price":0.0005,"out_price":0.0007,"in_length":256000, "out_length":4096}
+            Model(key="meta", model_id="meta.llama3-70b-instruct-v1:0", in_price=0.00099, out_price=0.00099, in_length=8*1024, out_length=2048),
+            Model(key="mistral", model_id="mistral.mistral-large-2402-v1:0", in_price=0.004, out_price=0.012, in_length=32768, out_length=8192),
+            Model(key="amazon", model_id="amazon.titan-text-premier-v1:0", in_price=0.0005, out_price=0.0015, in_length=32768, out_length=3000),
+            Model(key="cohere", model_id="cohere.command-r-plus-v1:0", in_price=0.003, out_price=0.015, in_length=128000, out_length=4096),
+            Model(key="anthropic", model_id="anthropic.claude-3-5-sonnet-20240620-v1:0", in_price=0.003, out_price=0.015, in_length=200000, out_length=4096),
+            Model(key="ai21", model_id="ai21.jamba-instruct-v1:0", in_price=0.0005, out_price=0.0007, in_length=256000, out_length=4096)
         ]
         # find the maximum context length
-        self.longest_model = sorted(self.models, key=lambda x: x["in_length"])[-1]
+        self.longest_model = sorted(self.models, key=lambda x: x.in_length)[-1]
         # create a set of models for quick access
-        self.model_names = {model["key"] for model in self.models}
+        self.model_names = {model.key for model in self.models}
 
         # set up the bedrock client
         self._client = boto3.client("bedrock-runtime", region_name=os.environ.get('AWS_REGION'))
@@ -52,7 +61,7 @@ class Bedrock():
 
             current_model = models[i]
 
-            if context_text_length > current_model["in_length"]:
+            if context_text_length > current_model.in_length:
                 if i == len(models) - 1:
                     current_model = self.longest_model
                 else:
@@ -68,19 +77,19 @@ class Bedrock():
             try:
                 
                 response = self._client.converse(
-                    modelId=current_model["id"],
+                    modelId=current_model.model_id,
                     messages=conversation,
                     inferenceConfig={
-                        "maxTokens": current_model["out_length"],
+                        "maxTokens": current_model.out_length,
                         },
                 )
                 usage = response["usage"]
                 in_tokens = usage["inputTokens"]
                 out_tokens = usage["outputTokens"]
-                cost = in_tokens / 1000.0 * current_model["in_price"] + out_tokens / 1000.0 * current_model["out_price"]
+                cost = in_tokens / 1000.0 * current_model.in_price + out_tokens / 1000.0 * current_model.out_price
                 response_text = response["output"]["message"]["content"][0]["text"].strip()
 
-                return {"text": response_text, "model": current_model["id"], "cost": cost}
+                return {"text": response_text, "model": current_model.model_id, "cost": cost}
             except Exception as e:
                 # Log failure and try the next model
                 print(f"Model {current_model} failed at {datetime.now()}: {e}")
@@ -101,7 +110,7 @@ class ContextManager():
         self._bedrock = bedrock
         self._contexts = {}
         self._user_models = {}
-        self._model_dict = {model["key"]: model for model in self._bedrock.models}
+        self._model_dict = {model.key: model for model in self._bedrock.models}
 
     def get_context(self, context_id):
         return self._contexts.get(context_id, [])
@@ -127,7 +136,7 @@ class ContextManager():
         for i in range(len(context)):
             idx = i + 1
             context_text_length += len(context[-idx].text)
-            if context_text_length > self._bedrock.longest_model["in_length"]:
+            if context_text_length > self._bedrock.longest_model.in_length:
                 context_text_length -= len(context[-idx].text)
                 if i == 0:
                     context = []
@@ -147,7 +156,7 @@ class ContextManager():
             context = self.get_context(context_id)
 
         if len(context) == 0:
-            sorted_by_price = sorted(self._bedrock.models, key=lambda x: x["in_price"])
+            sorted_by_price = sorted(self._bedrock.models, key=lambda x: x.in_price)
         else:
             in_length = 0
             out_length = 0
@@ -158,14 +167,14 @@ class ContextManager():
                     out_length += len(c.text)
 
             sorted_by_price = sorted(
-                self._bedrock.models, key=lambda x: x["in_price"] * in_length + x["out_price"] * out_length)
+                self._bedrock.models, key=lambda x: x.in_price * in_length + x.out_price * out_length)
         
 
         models = []
         if context_id in self._user_models:
             models.append(self._user_models[context_id])
             for model in sorted_by_price:
-                if model["key"] != self._user_models[context_id]["key"]:
+                if model.key != self._user_models[context_id].key:
                     models.append(model)
         else:
             models.extend(sorted_by_price)
@@ -300,8 +309,8 @@ class Slack():
         context_id = f"{channel}:{user}"
         if not len(args.body["text"].strip()):
             models = self._context_manager.sort_models(context_id)
-            model_name = self._context_manager.get_model(context_id)['key']
-            args.say(f"Currently using {model_name}. You can use one of {', '.join([model['key'] for model in models])}")
+            model_name = self._context_manager.get_model(context_id).key
+            args.say(f"Currently using {model_name}. You can use one of {', '.join([model.key for model in models])}")
         elif args.body["text"] in self._bedrock.model_names:
             self._bedrock.set_model(context_id, args.body["text"])
             args.say(f"Model set to {args.body['text']}")
@@ -322,7 +331,7 @@ if __name__ == "__main__":
     app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
     bedrock = Bedrock()
     slack = Slack(bedrock)
-    app.command("/llm")(slack.ask)
+    app.command("/llmt")(slack.ask)
     app.command("/llmc")(slack.clear)
     app.command("/llmm")(slack.model)
     app.command("/llmh")(slack.help)
