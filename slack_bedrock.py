@@ -1,5 +1,7 @@
 import logging
+import json
 import os
+import pickle
 
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -103,13 +105,31 @@ class ContextItem():
         self.text = text
         self.type = type # TODO: use an enum
 
+    def to_dict(self):
+        return {"text": self.text, "type": self.type}
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(text=data["text"], item_type=data["type"])
+
 
 class ContextManager():
 
     def __init__(self, bedrock):
         self._bedrock = bedrock
-        self._contexts = {}
-        self._user_models = {}
+
+        if os.path.exists("contexts.pkl"):
+            with open('contexts.pkl', 'rb') as f:
+                self._contexts = pickle.load(f)
+        else:
+            self._contexts = {}
+
+        if os.path.exists("moels.pkl"):
+            with open('models.pkl', 'rb') as f:
+                self._user_models = pickle.load(f)
+        else:   
+            self._user_models = {}
+
         self._model_dict = {model.key: model for model in self._bedrock.models}
 
     def get_context(self, context_id):
@@ -118,6 +138,9 @@ class ContextManager():
     def set_context(self, context_id, context):
         context, _ = self.trim_context(context)
         self._contexts[context_id] = context
+
+        with open('contexts.pkl', 'wb') as f:
+            pickle.dump(self._contexts, f)
 
     def get_model(self, context_id):
         if context_id in self._user_models:
@@ -129,6 +152,9 @@ class ContextManager():
     
     def set_model(self, context_id, model_key):
         self._user_models[context_id] = self._model_dict[model_key]
+
+        with open('models.pkl', 'wb') as f:
+            pickle.dump(self._user_models, f)
 
     # @classmethod
     def trim_context(self, context :List[Dict[str,str]]):
