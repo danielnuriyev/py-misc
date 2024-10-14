@@ -8,6 +8,7 @@ from logging.handlers import RotatingFileHandler
 from typing import List, Dict
 
 import boto3
+import requests
 
 from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
@@ -213,7 +214,6 @@ class Slack():
         self._context_manager = ContextManager(bedrock)
         self._bedrock = bedrock
 
-    # @app.command("/testllm")
     def ask(self, args):
 
         start = datetime.now()
@@ -318,16 +318,18 @@ class Slack():
             args.say(f"Error: {e}")
         
 
-    # @app.command("/llmc")
     def clear(self, args):
         args.ack()
         channel = args.body["channel_name"]
         user = args.body["user_name"]
         context_id = f"{channel}:{user}"
         self._context_manager.set_context(context_id, [])
+
+        args.logger.info("Context cleared")
+
         args.say("Clear the context")
 
-    # @app.command("/llmm")
+
     def model(self, args):
         args.ack()
         channel = args.body["channel_name"]
@@ -343,7 +345,7 @@ class Slack():
         else:
             args.say(f"Use one of {', '.join(self._bedrock.model_names)}")
 
-    # @app.command("/llmh")
+
     def help(self, args):
         args.ack()
         args.say("""
@@ -351,15 +353,64 @@ class Slack():
     Use /llmc to clear the context.
     Use /llmm to get the current model or to change the model.The models are sorted by price.
         """)
-    
+
+
+    def test(self, args):
+        args.ack()
+        body = args.body
+        print(body)
+        args.say(body["text"])
+
+
+    def handle_files(self, args):
+
+        args.ack()
+        
+        if "event" in args.body:
+
+            event = args.body.get("event", {})
+
+            if "files" in event:
+                for file in event["files"]:
+
+                    download_url = file.get("url_private_download")
+                    print(download_url)
+
+                    """
+                    file_id = file.get("id")
+                    response = args.client.files_info(file=file_id)
+                    file_info = response.get("file", {})
+                    download_url = file_info.get("url_private_download")
+                    print(download_url)
+                    """
+
+                    headers = {
+                        "Authorization": f"Bearer {args.client.token}"
+                    }
+                    
+                    file_content = requests.get(download_url, headers=headers)
+                    
+                    if file_content.status_code > 199 and file_content.status_code < 300:
+                        # print(file_content.content)
+                        file_name = file.get("name", None)
+                        with open(f"slack-download-{file_name}", "wb") as f:
+                            f.write(file_content.content)
+                        args.say(f"File '{file_name}' has been downloaded successfully!")
+                    else:
+                        args.say(f"Failed to download the file: {file_name}")
+
 if __name__ == "__main__":
     _setup_logging()
     app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
     bedrock = Bedrock()
     slack = Slack(bedrock)
-    app.command("/llmt")(slack.ask)
+    app.command("/llm")(slack.ask)
     app.command("/llmc")(slack.clear)
     app.command("/llmm")(slack.model)
     app.command("/llmh")(slack.help)
+    
+    # app.command("/llmt")(slack.test)
+    # app.event("message")(slack.handle_files)
+
     slack = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     slack.start()

@@ -3,8 +3,11 @@
 .venv
 __pycache__
 id.decrypted
+*.jar
 *.jpg
 *.json
+*.log
 *.pem
+*.pkl
 *.ppk
 *.pyc

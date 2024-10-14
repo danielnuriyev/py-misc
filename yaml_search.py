@@ -2,15 +2,7 @@ import os
 import yaml
 
 def load(directory):
- """Walks a directory, parses YAML files, and collects parsed data in a list.
-
- Args:
-   directory: The path to the directory to walk.
-
- Returns:
-   A list of parsed YAML data.
- """
-
+ 
  parsed_data = []
 
  for root, _, files in os.walk(directory):
@@ -23,38 +15,67 @@ def load(directory):
            yaml_obj = yaml.safe_load(stream)
            yaml_obj["file"] = file
            # print(yaml_obj)
-           parsed_data.append(yaml_obj)
+           parsed_data.append({
+              "path": file_path,
+              "object": yaml_obj,
+           })
        except yaml.YAMLError as exc:
          print(f"Error parsing YAML file '{file_path}': {exc}")
 
  return parsed_data
 
-def search(objects):
+def count_raw(objects):
 
-  count = 0
+  found = []
 
-  for object in objects:
+  objects.sort(key=lambda x: x["path"])
+
+  for element in objects:
+
+    object = element["object"]
     
     if "skip" in object and object["skip"]:
       continue
 
+    # if "ingest_method" in object and object["ingest_method"] in {"reloaded", "appended", "streamed"}:
+    #  continue
+
     if "dependencies" in object:
-      continue  
-      
+      continue
+
     if "steps" in object:
-      _continue = False
       for step in object["steps"]:
-        if step["type"] == "source" and step["resource"] == "athena_query_extract":
-          _continue = True
-          break
-      if _continue:
-        continue
+        if "type" in step and step["type"] == "source":
+          if "resource" in step and step["resource"] != "athena_query_extract":
+            found.append(element["path"])
+            break
+      
+  return found
 
-    count += 1
+def search(objects):
 
-  return count
+  max_steps = 0
+  found = None
+
+  for element in objects:
+
+    object = element["object"]
+    
+    if "skip" in object and object["skip"]:
+      continue
+
+    if "steps" in object:
+      if len(object["steps"]) > max_steps:
+        max_steps = len(object["steps"])
+        found = element["path"]
+      
+  return [(found,max_steps)]
 
 directory = "/Users/daniel.nuriyev/projects/data-platform/dagster"
 objects = load(directory)
 results = search(objects)
-print(results)
+
+for result in results:
+  print(result)
+
+print(len(results))
