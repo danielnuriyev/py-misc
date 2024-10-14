@@ -388,8 +388,11 @@ class Slack():
                         "Authorization": f"Bearer {args.client.token}"
                     }
                     
+                    # THIS DOES NOT WORK FOR AN UNKNOWN REASON
+                    # the goal was to upload files as a context
                     file_content = requests.get(download_url, headers=headers)
                     
+                    """
                     if file_content.status_code > 199 and file_content.status_code < 300:
                         # print(file_content.content)
                         file_name = file.get("name", None)
@@ -398,6 +401,7 @@ class Slack():
                         args.say(f"File '{file_name}' has been downloaded successfully!")
                     else:
                         args.say(f"Failed to download the file: {file_name}")
+                    """
 
 if __name__ == "__main__":
     _setup_logging()
