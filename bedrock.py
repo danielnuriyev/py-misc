@@ -1,3 +1,4 @@
+import argparse
 import logging
 import json
 import os
@@ -403,7 +404,7 @@ class Slack():
                         args.say(f"Failed to download the file: {file_name}")
                     """
 
-if __name__ == "__main__":
+def slack():
     _setup_logging()
     app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
     bedrock = Bedrock()
@@ -418,3 +419,47 @@ if __name__ == "__main__":
 
     slack = SocketModeHandler(app, os.environ["SLACK_APP_TOKEN"])
     slack.start()
+
+def cli():
+    parser = argparse.ArgumentParser(description="A Bedrock command line tool")
+
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-q', action='store', help='The question to be sent to Bedrock')
+
+    args = parser.parse_args()
+
+    bedrock = Bedrock()
+    context_manager = ContextManager(bedrock)
+    context_id = "local"
+    context = context_manager.get_context(context_id)
+
+    current_context = []
+    current_context.extend(context)
+    if args.q:
+        current_context.append(ContextItem(text=args.q, type="in"))
+
+        # make sure that the current context does not exceed the max length
+        current_context, context_text_length = context_manager.trim_context(current_context)
+        
+        # get the cheapest model for this channel:user
+        models = context_manager.sort_models(context_id, current_context)
+
+        try:
+        
+            # send the question with the context to bedrock
+            answer = bedrock.call(models, current_context)
+            print(answer)
+
+            context.append(ContextItem(text=args.q, type="in"))
+            context.append(ContextItem(text=answer["text"], type="out"))
+
+            # save the context per channel:user
+            context_manager.set_context(context_id, context) 
+
+        except Exception as e:
+            print(f"Error: {e}")
+            return
+       
+
+if __name__ == "__main__":
+    cli()
