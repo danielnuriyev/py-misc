@@ -26,7 +26,7 @@ class Bedrock():
             Model(key="amazon", model_id="amazon.titan-text-premier-v1:0", in_price=0.0005, out_price=0.0015, in_length=32768, out_length=3000),
             Model(key="cohere", model_id="cohere.command-r-plus-v1:0", in_price=0.003, out_price=0.015, in_length=128000, out_length=4096),
             Model(key="anthropic", model_id="anthropic.claude-3-5-sonnet-20240620-v1:0", in_price=0.003, out_price=0.015, in_length=200000, out_length=4096),
-            Model(key="ai21", model_id="ai21.jamba-instruct-v1:0", in_price=0.0005, out_price=0.0007, in_length=256000, out_length=4096)
+            # Model(key="ai21", model_id="ai21.jamba-instruct-v1:0", in_price=0.0005, out_price=0.0007, in_length=256000, out_length=4096)
         ]
         # find the maximum context length
         self.longest_model = sorted(self.models, key=lambda x: x.in_length)[-1]
