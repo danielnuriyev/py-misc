@@ -45,10 +45,15 @@ def count_raw(objects):
 
     if "steps" in object:
       for step in object["steps"]:
-        if "type" in step and step["type"] == "source":
+        if step.get("type",None) == "source":
           if "resource" in step and step["resource"] != "athena_query_extract":
             found.append(element["path"])
             break
+        if step.get("type",None) == "link" and step.get("op",None) == "create_table":
+          if step.get("config",{}).get("storage_folder",None) != None:
+            found.append(element["path"])
+            break
+        
       
   return found
 
@@ -73,7 +78,7 @@ def search(objects):
 
 directory = "/Users/daniel.nuriyev/projects/data-platform/dagster"
 objects = load(directory)
-results = search(objects)
+results = count_raw(objects)
 
 for result in results:
   print(result)

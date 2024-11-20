@@ -137,7 +137,7 @@ class ContextManager():
             pickle.dump(self._user_models, f)
 
     def reset_model(self, context_id):
-        del self._user_models[context_id]
+        self._user_models.pop(context_id, None)
 
         with open('models.pkl', 'wb') as f:
             pickle.dump(self._user_models, f)
