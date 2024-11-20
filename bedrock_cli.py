@@ -78,7 +78,7 @@ class Shell(cmd.Cmd):
         Shell.context_manager.clear_context(Shell.context_id)
         print("Context cleared")
 
-    def do_print_context(self, arg):
+    def do_print_context (self, arg):
         context = Shell.context_manager.get_context(Shell.context_id)
         for item in context:
             print(item.text)
@@ -113,30 +113,37 @@ class Shell(cmd.Cmd):
         print(f"Using {model.key}. You can use one of {[model.key for model in models]}")
 
     def do_file_to_context(self, arg):
+
+        args = arg.split(" ")
+        path = args[0]
+        types = args[1] if len(args) > 1 else None
+
         current_context = Shell.context_manager.get_context(Shell.context_id)
-        if os.path.isfile(arg):
-            with open(arg, "r") as f:
+        if os.path.isfile(path):
+            with open(path, "r") as f:
                 lines = f.read()
                 current_context.append(bedrock.ContextItem(text=lines, type="in"))
                 Shell.context_manager.set_context(Shell.context_id, current_context)
-        elif os.path.isdir(arg):
-            file_paths = glob.glob(arg + "/**/*", recursive=True)
+        elif os.path.isdir(path):
+            pattern = "*"
+            if types:
+                _types = types.split(",")
+                if len(_types) == 1:
+                    pattern = f"*.{_types[0]}"
+                else:
+                    pattern = f"*.{{types}}"
+
+            file_paths = glob.glob(path + f"/**/{pattern}", recursive=True)
             for file_path in file_paths:
                 if os.path.isfile(file_path):
-
-                    """
-                    if args.file_types:
-                        for file_type in args.file_types.split(","):
-                            if not file_path.endswith(file_type):
-                                continue
-                    """            
+                    
                     with open(file_path, "r") as f:
                         lines = f.read()
                         current_context.append(bedrock.ContextItem(text=lines, type="in"))            
 
             Shell.context_manager.set_context(Shell.context_id, current_context)
         else:
-            print(f"File {arg} not found")
+            print(f"File {path} not found")
 
     def do_quit(self, arg):
         """Exit the shell - Usage: quit"""
