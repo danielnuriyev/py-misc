@@ -1,12 +1,12 @@
 import argparse
-import cmd
+import cmd2
 import glob
 import os
 import sys
 
 import bedrock
 
-class Shell(cmd.Cmd):
+class Shell(cmd2.Cmd):
 
     intro = "A Bedrock command line tool\n"
     prompt = "➜ "
@@ -30,6 +30,9 @@ class Shell(cmd.Cmd):
     context_manager = bedrock.ContextManager(bedrock_client)
     context_id = "local"
     
+    def do_a(self, arg):
+        self.do_ask(arg)
+
     def do_ask(self, arg):
 
         context = Shell.context_manager.get_context(Shell.context_id)
@@ -73,15 +76,23 @@ class Shell(cmd.Cmd):
             print(f"Error: {e}")
             return
     
-    
+    def do_cc(self, arg):
+        self.do_clear_context(arg)
+
     def do_clear_context(self, arg):
         Shell.context_manager.clear_context(Shell.context_id)
         print("Context cleared")
+
+    def do_pc(self, arg):
+        self.do_print_context(arg)
 
     def do_print_context (self, arg):
         context = Shell.context_manager.get_context(Shell.context_id)
         for item in context:
             print(item.text)
+
+    def do_ctf(self, arg):
+        self.do_context_to_file(arg)
 
     def do_context_to_file(self, arg):
         context = Shell.context_manager.get_context(Shell.context_id)
@@ -91,11 +102,17 @@ class Shell(cmd.Cmd):
         with open(arg, "w") as f:
             f.write(txt)
 
+    def do_lm(self, arg):
+        self.do_list_models(arg)
+
     def do_list_models(self, arg):
         model = Shell.context_manager.get_model(Shell.context_id)
         current_context = Shell.context_manager.get_context(Shell.context_id)
         models = Shell.context_manager.sort_models(Shell.context_id, current_context)
         print(f"Using {model.key}. You can use one of {[model.key for model in models]}")
+
+    def do_sm(self, arg):
+        self.do_set_model(arg)
 
     def do_set_model(self, arg):
         if arg in Shell.bedrock_client.model_names:
@@ -104,6 +121,9 @@ class Shell(cmd.Cmd):
         else:
             print(f"Use one of {', '.join(Shell.bedrock_client.model_names)}")
 
+    def do_rm(self, arg):
+        self.do_reset_model(arg)
+
     def do_reset_model(self, arg):
         Shell.context_manager.reset_model(Shell.context_id)
         model = Shell.context_manager.get_model(Shell.context_id)
@@ -111,6 +131,9 @@ class Shell(cmd.Cmd):
         current_context = Shell.context_manager.get_context(Shell.context_id)
         models = Shell.context_manager.sort_models(Shell.context_id, current_context)
         print(f"Using {model.key}. You can use one of {[model.key for model in models]}")
+
+    def do_ftc(self, arg):
+        self.do_file_to_context(arg)
 
     def do_file_to_context(self, arg):
 
@@ -145,15 +168,27 @@ class Shell(cmd.Cmd):
         else:
             print(f"File {path} not found")
 
+    def do_q(self, arg):
+        return self.do_quit(arg)
+
     def do_quit(self, arg):
-        """Exit the shell - Usage: quit"""
-        print("Goodbye!")
         return True
+    
+    def do_help(self, arg):
+        help = """
+        a - ask a question
+        cc - clear context
+        pc - print context
+        ctf - context to file
+        lm - list models
+        sm - set model
+        rm - reset model
+        ftc - file to context
+        q - quit
+        """
 
 if __name__ == "__main__":
     try:
-        shell = Shell()
-        shell.cmdloop()
+        Shell().cmdloop()
     except KeyboardInterrupt:
-        print("\nGoodbye!")
         sys.exit(0)
