@@ -21,7 +21,7 @@ class Bedrock():
 
         # set up the models
         self.models = [
-            Model(key="meta", model_id="meta.llama3-70b-instruct-v1:0", in_price=0.00099, out_price=0.00099, in_length=8*1024, out_length=2048),
+            Model(key="meta", model_id="meta.llama3-70b-instruct-v1:0", in_price=0.00072, out_price=0.00072, in_length=128000, out_length=2048),
             Model(key="mistral", model_id="mistral.mistral-large-2402-v1:0", in_price=0.004, out_price=0.012, in_length=32768, out_length=8192),
             Model(key="amazon", model_id="amazon.titan-text-premier-v1:0", in_price=0.0005, out_price=0.0015, in_length=32768, out_length=3000),
             Model(key="cohere", model_id="cohere.command-r-plus-v1:0", in_price=0.003, out_price=0.015, in_length=128000, out_length=4096),

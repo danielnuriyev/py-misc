@@ -11,21 +11,6 @@ class Shell(cmd2.Cmd):
     intro = "A Bedrock command line tool\n"
     prompt = "➜ "
 
-    """
-    parser = argparse.ArgumentParser(description="A Bedrock command line tool")
-    group = parser #.add_mutually_exclusive_group(required=True)
-    group.add_argument("-a", "--ask", action="store", help="The question to be sent to Bedrock")
-    group.add_argument("-c", "--clear-context", action="store_true", help="Clears the context")
-    group.add_argument("-p", "--print-context", action="store_true", help="Print the context")
-    group.add_argument("-m", "--list-models", action="store_true", help="Lists the models")
-    group.add_argument("-s", "--set-model", action="store", help="Sets the model")
-    group.add_argument("-r", "--reset-model", action="store_true", help="Resets the model")
-    group.add_argument("-f", "--file-to-context", action="store", help="Uploads a file or directory as context")
-    group.add_argument("-t", "--file-types", action="store", help="Comma separated list of file types such as sql,yaml,py to upload as context")
-    group.add_argument("-x", "--select-files", action="store", help="Spacify criteria for files")
-    args = parser.parse_args()
-    """
-
     bedrock_client = bedrock.Bedrock()
     context_manager = bedrock.ContextManager(bedrock_client)
     context_id = "local"
@@ -34,6 +19,8 @@ class Shell(cmd2.Cmd):
         self.do_ask(arg)
 
     def do_ask(self, arg):
+
+        arg = arg.args
 
         context = Shell.context_manager.get_context(Shell.context_id)
         current_context = []
@@ -45,7 +32,10 @@ class Shell(cmd2.Cmd):
         current_context, context_text_length = Shell.context_manager.trim_context(current_context)
         
         # get the cheapest model for this channel:user
+        model = Shell.context_manager.get_model(Shell.context_id)
         models = Shell.context_manager.sort_models(Shell.context_id, current_context)
+        if model != models[0]:
+            models = [model].extend([m for m in models if m != model])
 
         try:
         
@@ -95,6 +85,7 @@ class Shell(cmd2.Cmd):
         self.do_context_to_file(arg)
 
     def do_context_to_file(self, arg):
+        arg = arg.args
         context = Shell.context_manager.get_context(Shell.context_id)
         txt = ""
         for item in context:
@@ -109,12 +100,15 @@ class Shell(cmd2.Cmd):
         model = Shell.context_manager.get_model(Shell.context_id)
         current_context = Shell.context_manager.get_context(Shell.context_id)
         models = Shell.context_manager.sort_models(Shell.context_id, current_context)
+        if model != models[0]:
+            models = [model].extend([m for m in models if m != model])
         print(f"Using {model.key}. You can use one of {[model.key for model in models]}")
 
     def do_sm(self, arg):
         self.do_set_model(arg)
 
     def do_set_model(self, arg):
+        arg = arg.args
         if arg in Shell.bedrock_client.model_names:
             Shell.context_manager.set_model(Shell.context_id, arg)
             print(f"Model set to {arg}")
@@ -127,15 +121,17 @@ class Shell(cmd2.Cmd):
     def do_reset_model(self, arg):
         Shell.context_manager.reset_model(Shell.context_id)
         model = Shell.context_manager.get_model(Shell.context_id)
-        print(model.key)
         current_context = Shell.context_manager.get_context(Shell.context_id)
         models = Shell.context_manager.sort_models(Shell.context_id, current_context)
+        if model != models[0]:
+            models = [model].extend([m for m in models if m != model])
         print(f"Using {model.key}. You can use one of {[model.key for model in models]}")
 
     def do_ftc(self, arg):
         self.do_file_to_context(arg)
 
     def do_file_to_context(self, arg):
+        arg = arg.args
 
         args = arg.split(" ")
         path = args[0]
@@ -186,6 +182,7 @@ class Shell(cmd2.Cmd):
         ftc - file to context
         q - quit
         """
+        print(help) 
 
 if __name__ == "__main__":
     try:

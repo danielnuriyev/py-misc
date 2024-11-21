@@ -59,7 +59,10 @@ class Slack():
         current_context, context_text_length = self._context_manager.trim_context(current_context)
         
         # get the cheapest model for this channel:user
+        model = self.context_manager.get_model(context_id)
         models = self._context_manager.sort_models(context_id, current_context)
+        if model != models[0]:
+            models = [model].extend([m for m in models if m != model])
 
         try:
         
