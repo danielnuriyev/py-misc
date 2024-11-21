@@ -171,9 +171,10 @@ class Shell(cmd2.Cmd):
         cc  # clears context
         pc  # prints context
         ctf {file path}  # writes context to a text file
+        cl  # prints context length
         lm  # lists models
         sm {model} # sets model
-        rm  # reset model to default
+        rm  # reset model to cheapest given the current context
         ftc {path} {extention:options} # adds a file or files in a directory to the context
             ftc /full/path/to/file.txt
             ftc /full/path/to/directory
