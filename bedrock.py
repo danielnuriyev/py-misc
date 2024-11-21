@@ -75,7 +75,7 @@ class Bedrock():
                 return {"text": response_text, "model": current_model.model_id, "cost": cost}
             except Exception as e:
                 # Log failure and try the next model
-                print(f"Model {current_model} failed at {datetime.now()}: {e}")
+                print(f"Model {current_model.key} failed at {datetime.now()}: {e}")
 
         # If all models fail, raise an HTTPException
         raise Exception("All models failed to process the request")

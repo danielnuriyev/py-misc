@@ -78,6 +78,13 @@ class Shell(cmd2.Cmd):
         for item in context:
             print(item.text)
 
+    def do_cl(self, arg):
+        self.do_context_length(arg)
+
+    def do_context_length(self, arg):
+        context = Shell.context_manager.get_context(Shell.context_id)
+        print(sum([len(item.text) for item in context]))
+
     def do_ctf(self, arg):
         self.do_context_to_file(arg)
 
