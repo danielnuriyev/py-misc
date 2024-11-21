@@ -160,15 +160,19 @@ class Shell(cmd2.Cmd):
     
     def do_help(self, arg):
         help = """
-        a - ask a question
-        cc - clear context
-        pc - print context
-        ctf - context to file
-        lm - list models
-        sm - set model
-        rm - reset model
-        ftc - file to context
-        q - quit
+        a {question}
+        cc  # clears context
+        pc  # prints context
+        ctf {file path}  # writes context to a text file
+        lm  # lists models
+        sm {model} # sets model
+        rm  # reset model to default
+        ftc {path} {extention:options} # adds a file or files in a directory to the context
+            ftc /full/path/to/file.txt
+            ftc /full/path/to/directory
+            ftc /full/path/to/directory yaml
+            ftc /full/path/to/directory yaml,sql
+        q  # quit
         """
         print(help) 
 
