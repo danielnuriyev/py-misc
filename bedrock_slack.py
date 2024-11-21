@@ -59,10 +59,7 @@ class Slack():
         current_context, context_text_length = self._context_manager.trim_context(current_context)
         
         # get the cheapest model for this channel:user
-        model = self.context_manager.get_model(context_id)
-        models = self._context_manager.sort_models(context_id, current_context)
-        if model != models[0]:
-            models = [model].extend([m for m in models if m != model])
+        models = self._context_manager.get_models(context_id)
 
         try:
         
@@ -153,9 +150,8 @@ class Slack():
         user = args.body["user_name"]
         context_id = f"{channel}:{user}"
         if not len(args.body["text"].strip()):
-            models = self._context_manager.sort_models(context_id)
-            model_name = self._context_manager.get_model(context_id).key
-            args.say(f"Currently using {model_name}. You can use one of {', '.join([model.key for model in models])}")
+            models = self._context_manager.get_models(context_id)
+            args.say(f"Currently using {models[0]._name}. You can use one of {', '.join([model.key for model in models])}")
         elif args.body["text"] in self._bedrock.model_names:
             self._context_manager.set_model(context_id, args.body["text"])
             args.say(f"Model set to {args.body['text']}")

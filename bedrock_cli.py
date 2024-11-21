@@ -32,10 +32,7 @@ class Shell(cmd2.Cmd):
         current_context, context_text_length = Shell.context_manager.trim_context(current_context)
         
         # get the cheapest model for this channel:user
-        model = Shell.context_manager.get_model(Shell.context_id)
-        models = Shell.context_manager.sort_models(Shell.context_id, current_context)
-        if model != models[0]:
-            models = [model].extend([m for m in models if m != model])
+        models = Shell.context_manager.get_models(Shell.context_id)
 
         try:
         
@@ -97,12 +94,8 @@ class Shell(cmd2.Cmd):
         self.do_list_models(arg)
 
     def do_list_models(self, arg):
-        model = Shell.context_manager.get_model(Shell.context_id)
-        current_context = Shell.context_manager.get_context(Shell.context_id)
-        models = Shell.context_manager.sort_models(Shell.context_id, current_context)
-        if model != models[0]:
-            models = [model].extend([m for m in models if m != model])
-        print(f"Using {model.key}. You can use one of {[model.key for model in models]}")
+        models = Shell.context_manager.get_models(Shell.context_id)    
+        print(f"Using {models[0].key}. You can use one of {[model.key for model in models]}")
 
     def do_sm(self, arg):
         self.do_set_model(arg)
@@ -120,12 +113,7 @@ class Shell(cmd2.Cmd):
 
     def do_reset_model(self, arg):
         Shell.context_manager.reset_model(Shell.context_id)
-        model = Shell.context_manager.get_model(Shell.context_id)
-        current_context = Shell.context_manager.get_context(Shell.context_id)
-        models = Shell.context_manager.sort_models(Shell.context_id, current_context)
-        if model != models[0]:
-            models = [model].extend([m for m in models if m != model])
-        print(f"Using {model.key}. You can use one of {[model.key for model in models]}")
+        self.do_list_models(arg)
 
     def do_ftc(self, arg):
         self.do_file_to_context(arg)

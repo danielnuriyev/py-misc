@@ -122,12 +122,12 @@ class ContextManager():
         with open('contexts.pkl', 'wb') as f:
             pickle.dump(self._contexts, f)
 
-    def get_model(self, context_id):
+    def _get_model(self, context_id):
         if context_id in self._user_models:
             return self._user_models[context_id]
         else:
             context = self._contexts.get(context_id, [])
-            models = self.sort_models(context_id, context)
+            models = self._sort_models(context_id, context)
             return models[0]
     
     def set_model(self, context_id, model_key):
@@ -160,7 +160,7 @@ class ContextManager():
     def clear_context(self, context_id):
         self.set_context(context_id, [])
 
-    def sort_models(self, context_id, context=None):
+    def _sort_models(self, context_id, context=None):
         
         """
         Sorts the models by price for a user.
@@ -196,3 +196,10 @@ class ContextManager():
         
         return models
         
+    def get_models(self, context_id):
+        model = self._get_model(context_id)
+        current_context = self.get_context(context_id)
+        models = self._sort_models(context_id, current_context)
+        if model != models[0]:
+            models = [model].extend([m for m in models if m != model])
+        return models
