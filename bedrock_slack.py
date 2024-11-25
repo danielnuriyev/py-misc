@@ -24,10 +24,6 @@ def _setup_logging():
 
 class Slack():
 
-    def __init__(self, bedrock):
-        self._context_manager = bedrock.ContextManager(bedrock)
-        self._bedrock = bedrock
-
     def ask(self, args):
 
         start = datetime.now()
@@ -47,25 +43,11 @@ class Slack():
         args.logger.setLevel("INFO")
         args.logger.info(f"Request at {datetime.now()} from {context_id}: {question}")
 
-        # get the context of this channel:user
-        context = self._context_manager.get_context(context_id)
-
-        # create context for this question
-        current_context = []
-        current_context.extend(context)
-        current_context.append(bedrock.ContextItem(text=question, type="in"))
-
-        # make sure that the current context does not exceed the max length
-        current_context, context_text_length = self._context_manager.trim_context(current_context)
-        
-        # get the cheapest model for this channel:user
-        models = self._context_manager.get_models(context_id)
-
         try:
         
             # send the question with the context to bedrock
-            answer = self._bedrock.call(models, current_context)
-        
+            answer = bedrock.Chat(context_id).ask(question)
+            
             # form the response to Slack
             # answer["context_length"] = context_text_length
             blocks = {
@@ -102,7 +84,7 @@ class Slack():
                             },
                             {
                                 "type": "mrkdwn",
-                                "text": f"*Context length:* {context_text_length}"
+                                "text": f"*Context length:* {answer['context_length']}"
                             },
                             {
                                 "type": "mrkdwn",
@@ -121,13 +103,6 @@ class Slack():
             args.logger.info(
                 f"Response at {end} for {context_id} with {answer['model']} taking {(end-start).total_seconds()} seconds costing ${answer['cost']:f}")
 
-            # form the latest context
-            context.append(bedrock.ContextItem(text=question, type="in"))
-            context.append(bedrock.ContextItem(text=answer["text"], type="out"))
-
-            # save the context per channel:user
-            self._context_manager.set_context(context_id, context) 
-
         except Exception as e:
             args.say(f"Error: {e}")
         
@@ -137,7 +112,8 @@ class Slack():
         channel = args.body["channel_name"]
         user = args.body["user_name"]
         context_id = f"{channel}:{user}"
-        self._context_manager.set_context(context_id, [])
+        
+        bedrock.Chat(context_id).clear_context()
 
         args.logger.info("Context cleared")
 
@@ -150,10 +126,10 @@ class Slack():
         user = args.body["user_name"]
         context_id = f"{channel}:{user}"
         if not len(args.body["text"].strip()):
-            models = self._context_manager.get_models(context_id)
+            models = bedrock.Chat(context_id).list_models()
             args.say(f"Currently using {models[0]._name}. You can use one of {', '.join([model.key for model in models])}")
         elif args.body["text"] in self._bedrock.model_names:
-            self._context_manager.set_model(context_id, args.body["text"])
+            bedrock.Chat(context_id).set_model(args.body["text"])
             args.say(f"Model set to {args.body['text']}")
         else:
             args.say(f"Use one of {', '.join(self._bedrock.model_names)}")
@@ -219,8 +195,7 @@ class Slack():
 def slack():
     _setup_logging()
     app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
-    b = bedrock.Bedrock()
-    slack = Slack(b)
+    slack = Slack()
     app.command("/llm")(slack.ask)
     app.command("/llmc")(slack.clear)
     app.command("/llmm")(slack.model)

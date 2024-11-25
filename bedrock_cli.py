@@ -1,4 +1,3 @@
-import argparse
 import cmd2
 import glob
 import os
@@ -6,14 +5,15 @@ import sys
 
 import bedrock
 
+
 class Shell(cmd2.Cmd):
 
     intro = "A Bedrock command line tool\n"
     prompt = "➜ "
 
-    bedrock_client = bedrock.Bedrock()
-    context_manager = bedrock.ContextManager(bedrock_client)
-    context_id = "local"
+    def __init__(self):
+        super().__init__()
+        self.chat = bedrock.Chat("local")
     
     def do_a(self, arg):
         self.do_ask(arg)
@@ -22,23 +22,9 @@ class Shell(cmd2.Cmd):
 
         arg = arg.args
 
-        context = Shell.context_manager.get_context(Shell.context_id)
-        current_context = []
-        current_context.extend(context)
-
-        current_context.append(bedrock.ContextItem(text=arg, type="in"))
-
-        # make sure that the current context does not exceed the max length
-        current_context, context_text_length = Shell.context_manager.trim_context(current_context)
-        
-        # get the cheapest model for this channel:user
-        models = Shell.context_manager.get_models(Shell.context_id)
-
         try:
         
-            # send the question with the context to bedrock
-            answer = Shell.bedrock_client.call(models, current_context)
-            # answer["context_length"] = context_text_length
+            answer = self.chat.ask(arg)
 
             print()
 
@@ -48,16 +34,10 @@ class Shell(cmd2.Cmd):
                 print(line)
 
             print()
-            print(f"Context length: {context_text_length}")
+            print(f"Context length: {answer['context_length']}")
             print(f"Model: {answer['model']}")
             print(f"Cost: ${answer['cost']:f}")
             print()
-
-            context.append(bedrock.ContextItem(text=arg, type="in"))
-            context.append(bedrock.ContextItem(text=answer["text"], type="out"))
-
-            # save the context per channel:user
-            Shell.context_manager.set_context(Shell.context_id, context) 
 
         except Exception as e:
             print(f"Error: {e}")
@@ -67,14 +47,14 @@ class Shell(cmd2.Cmd):
         self.do_clear_context(arg)
 
     def do_clear_context(self, arg):
-        Shell.context_manager.clear_context(Shell.context_id)
+        self.chat.clear_context()
         print("Context cleared")
 
     def do_pc(self, arg):
         self.do_print_context(arg)
 
     def do_print_context (self, arg):
-        context = Shell.context_manager.get_context(Shell.context_id)
+        context = self.chat.get_context()
         for item in context:
             print(item.text)
 
@@ -82,7 +62,7 @@ class Shell(cmd2.Cmd):
         self.do_context_length(arg)
 
     def do_context_length(self, arg):
-        context = Shell.context_manager.get_context(Shell.context_id)
+        context = self.chat.get_context()
         print(sum([len(item.text) for item in context]))
 
     def do_ctf(self, arg):
@@ -90,7 +70,7 @@ class Shell(cmd2.Cmd):
 
     def do_context_to_file(self, arg):
         arg = arg.args
-        context = Shell.context_manager.get_context(Shell.context_id)
+        context = self.chat.get_context()
         txt = ""
         for item in context:
             txt += item.text
@@ -101,25 +81,25 @@ class Shell(cmd2.Cmd):
         self.do_list_models(arg)
 
     def do_list_models(self, arg):
-        models = Shell.context_manager.get_models(Shell.context_id)    
-        print(f"Using {models[0].key}. You can use one of {[model.key for model in models]}")
+        models = self.chat.list_models()    
+        print(f"Using {models[0]}. You can use one of {[model for model in models]}")
 
     def do_sm(self, arg):
         self.do_set_model(arg)
 
     def do_set_model(self, arg):
         arg = arg.args
-        if arg in Shell.bedrock_client.model_names:
-            Shell.context_manager.set_model(Shell.context_id, arg)
+        try:
+            self.chat.set_model(arg)
             print(f"Model set to {arg}")
-        else:
-            print(f"Use one of {', '.join(Shell.bedrock_client.model_names)}")
+        except Exception as e:
+            print(e)
 
     def do_rm(self, arg):
         self.do_reset_model(arg)
 
     def do_reset_model(self, arg):
-        Shell.context_manager.reset_model(Shell.context_id)
+        self.chat.reset_model()
         self.do_list_models(arg)
 
     def do_ftc(self, arg):
@@ -132,12 +112,12 @@ class Shell(cmd2.Cmd):
         path = args[0]
         types = args[1] if len(args) > 1 else None
 
-        current_context = Shell.context_manager.get_context(Shell.context_id)
+        current_context = self.chat.get_context()
         if os.path.isfile(path):
             with open(path, "r") as f:
                 lines = f.read()
                 current_context.append(bedrock.ContextItem(text=lines, type="in"))
-                Shell.context_manager.set_context(Shell.context_id, current_context)
+                self.chat.set_context(current_context)
         elif os.path.isdir(path):
             pattern = "*"
             if types:
@@ -155,7 +135,7 @@ class Shell(cmd2.Cmd):
                         lines = f.read()
                         current_context.append(bedrock.ContextItem(text=lines, type="in"))            
 
-            Shell.context_manager.set_context(Shell.context_id, current_context)
+            self.chat.set_context(current_context)
         else:
             print(f"File {path} not found")
 

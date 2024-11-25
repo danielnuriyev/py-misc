@@ -93,7 +93,7 @@ class ContextItem():
     def from_dict(cls, data):
         return cls(text=data["text"], item_type=data["type"])
 
-class ContextManager():
+class Context():
 
     def __init__(self, bedrock):
         self._bedrock = bedrock
@@ -114,6 +114,9 @@ class ContextManager():
 
     def get_context(self, context_id):
         return self._contexts.get(context_id, [])
+    
+    def context_length(self, context_id):
+        return sum([len(item.text) for item in self.get_context(context_id)])
     
     def set_context(self, context_id, context):
         context, _ = self.trim_context(context)
@@ -203,3 +206,62 @@ class ContextManager():
         if model != models[0]:
             models = [model].extend([m for m in models if m != model])
         return models
+    
+class Chat():
+
+    bedrock_client = Bedrock()
+    context_manager = Context(bedrock_client)
+
+    def __init__(self, context_id):
+        self._context_id = context_id
+    
+    def ask(self, question):
+
+        context = Chat.context_manager.get_context(self._context_id)
+        current_context = []
+        current_context.extend(context)
+
+        current_context.append(ContextItem(text=question, type="in"))
+
+        # make sure that the current context does not exceed the max length
+        current_context, context_text_length = Chat.context_manager.trim_context(current_context)
+        
+        # get the cheapest model for this channel:user
+        models = Chat.context_manager.get_models(self._context_id)
+
+        try:
+        
+            # send the question with the context to bedrock
+            answer = Chat.bedrock_client.call(models, current_context)
+
+            answer["context_length"] = context_text_length
+
+            context.append(ContextItem(text=question, type="in"))
+            context.append(ContextItem(text=answer["text"], type="out"))
+
+            # save the context per channel:user
+            Chat.context_manager.set_context(self._context_id, context) 
+
+            return answer
+
+        except Exception as e:
+            raise e
+    
+    def clear_context(self):
+        Chat.context_manager.clear_context(self._context_id)
+
+    def context_length(self):
+        return Chat.context_manager.context_length(self._context_id)
+
+    def list_models(self):
+        models = Chat.context_manager.get_models(self._context_id)    
+        return [model.key for model in models]
+
+    def set_model(self, model):
+        if model in Chat.bedrock_client.model_names:
+            Chat.context_manager.set_model(self._context_id, model)
+        else:
+            raise f"Use one of {', '.join(Chat.bedrock_client.model_names)}"
+
+    def reset_model(self):
+        Chat.context_manager.reset_model(self._context_id)
