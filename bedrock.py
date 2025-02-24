@@ -82,9 +82,10 @@ class Bedrock():
 
 class ContextItem():
 
-    def __init__(self, text, type):
+    def __init__(self, text, type, model=None):
         self.text = text
-        self.type = type # TODO: use an enum
+        self.type = type
+        self.model = model
 
     def to_dict(self):
         return {"text": self.text, "type": self.type}
@@ -140,13 +141,13 @@ class Context():
             pickle.dump(self._user_models, f)
 
     def reset_model(self, context_id):
-        self._user_models.pop(context_id, None)
+        self._user_models = {}
 
         with open('models.pkl', 'wb') as f:
             pickle.dump(self._user_models, f)
 
     # @classmethod
-    def trim_context(self, context :List[Dict[str,str]]):
+    def trim_context(self, context :List[ContextItem]):
         context_text_length = 0
         for i in range(len(context)):
             idx = i + 1
@@ -236,8 +237,8 @@ class Chat():
 
             answer["context_length"] = context_text_length
 
-            context.append(ContextItem(text=question, type="in"))
-            context.append(ContextItem(text=answer["text"], type="out"))
+            context.append(ContextItem(text=question, type="in", model=answer["model"]))
+            context.append(ContextItem(text=answer["text"], type="out", model=answer["model"]))
 
             # save the context per channel:user
             Chat.context_manager.set_context(self._context_id, context) 
@@ -247,11 +248,20 @@ class Chat():
         except Exception as e:
             raise e
     
+    def get_context(self):
+        return Chat.context_manager.get_context(self._context_id)
+
     def clear_context(self):
         Chat.context_manager.clear_context(self._context_id)
 
     def context_length(self):
         return Chat.context_manager.context_length(self._context_id)
+    
+    def add_to_context(self, text):
+        text = text.strip()
+        context = Chat.context_manager.get_context(self._context_id)
+        context.append(ContextItem(text, "in"))
+        Chat.context_manager.set_context(self._context_id, context)
 
     def list_models(self):
         models = Chat.context_manager.get_models(self._context_id)    

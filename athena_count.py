@@ -45,7 +45,7 @@ def count(table):
 
 if __name__ == "__main__":
     glue = boto3.client('glue')
-    db = "datalake_pii_agg"
+    db = "..."
     response = glue.get_tables(DatabaseName=db)
     tables = []
     while True:
@@ -53,7 +53,6 @@ if __name__ == "__main__":
         for i in range(len(tableList)):
             name = tableList[i]['Name']
             if name.startswith("z_"): continue
-            # if not name.startswith("device_"): continue
             tables.append(f'{db}."{name}"')
             print(f"{len(tables)} {name}")
         next = response["NextToken"] if "NextToken" in response else None
@@ -62,8 +61,7 @@ if __name__ == "__main__":
 
     cores =  multiprocessing.cpu_count()
     print(f"cores: {cores}")
-    # pool = ThreadPoolExecutor(max_workers=cores * 2)
-    pool = ProcessPoolExecutor(max_workers=8)
+    pool = ThreadPoolExecutor(max_workers=cores * 2)
 
     futures = []
     for table in tables:
@@ -84,6 +82,5 @@ if __name__ == "__main__":
         r = counts[i]
         t = r[0]
         c = r[1]
- #      if c < 100000000: break
         print(f'{i}\t{t}\t{c}')
     print(f"FINISHED ALL {len(tables)} in {int(time.time() - start)} seconds")
