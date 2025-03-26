@@ -130,11 +130,14 @@ if prompt := st.chat_input("/help for commands"):
 
         st.session_state.messages.append(prompt)
         with st.chat_message("question area"):
+            print(prompt)
+            print(prompt)
             st.markdown(prompt)
 
         with st.chat_message("answer area"):
             response = chat.ask(prompt)
+            print("response")
             print(response) 
-            st_response = st.write(response["text"])
+            st_response = st.markdown(response["text"])
             st.session_state.messages.append(st_response)
             st.markdown(f":gray[model: {response['model']}, context length: {response['context_length']}, cost: ${response['cost']:.4f}]")

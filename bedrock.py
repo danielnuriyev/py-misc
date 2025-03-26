@@ -21,12 +21,12 @@ class Bedrock():
 
         # set up the models
         self.models = [
-            Model(key="meta", model_id="meta.llama3-70b-instruct-v1:0", in_price=0.00072, out_price=0.00072, in_length=128000, out_length=2048),
+            Model(key="meta", model_id="meta.llama3-3-70b-instruct-v1:0", in_price=0.00072, out_price=0.00072, in_length=128000, out_length=2048),
             Model(key="mistral", model_id="mistral.mistral-large-2402-v1:0", in_price=0.004, out_price=0.012, in_length=32768, out_length=8192),
-            Model(key="amazon", model_id="amazon.titan-text-premier-v1:0", in_price=0.0005, out_price=0.0015, in_length=32768, out_length=3000),
+            Model(key="amazon", model_id="amazon.nova-pro-v1:0", in_price=0.0008, out_price=0.0032, in_length=300000, out_length=5000),
             Model(key="cohere", model_id="cohere.command-r-plus-v1:0", in_price=0.003, out_price=0.015, in_length=128000, out_length=4096),
-            Model(key="anthropic", model_id="anthropic.claude-3-5-sonnet-20240620-v1:0", in_price=0.003, out_price=0.015, in_length=200000, out_length=4096),
-            # Model(key="ai21", model_id="ai21.jamba-instruct-v1:0", in_price=0.0005, out_price=0.0007, in_length=256000, out_length=4096)
+            Model(key="anthropic", model_id="anthropic.claude-3-7-sonnet-20250219-v1:0", in_price=0.003, out_price=0.015, in_length=200000, out_length=128000),#
+            Model(key="ai21", model_id="ai21.jamba-1-5-large-v1:0", in_price=0.002, out_price=0.008, in_length=256000, out_length=256000)
         ]
         # find the maximum context length
         self.longest_model = sorted(self.models, key=lambda x: x.in_length)[-1]

@@ -12,16 +12,18 @@ def load(directory):
 
        try:
          with open(file_path, "r") as stream:
-           yaml_obj = yaml.safe_load(stream)
-           yaml_obj["file"] = file
-           # print(yaml_obj)
+           source = stream.read()
+           yaml_obj = yaml.safe_load(source)
            parsed_data.append({
-              "path": file_path,
-              "object": yaml_obj,
+             "file": file,
+             "path": file_path,
+             "object": yaml_obj,
+             "source": source
            })
        except yaml.YAMLError as exc:
          print(f"Error parsing YAML file '{file_path}': {exc}")
 
+ parsed_data = sorted(parsed_data, key=lambda x: x["path"]) 
  return parsed_data
 
 def count_raw(objects):
@@ -54,13 +56,13 @@ def count_raw(objects):
             found.append(element["path"])
             break
         
-      
   return found
 
-def search(objects):
+def count_sinks(objects):
 
-  max_steps = 0
-  found = None
+  found = []
+
+  objects.sort(key=lambda x: x["path"])
 
   for element in objects:
 
@@ -70,17 +72,34 @@ def search(objects):
       continue
 
     if "steps" in object:
-      if len(object["steps"]) > max_steps:
-        max_steps = len(object["steps"])
-        found = element["path"]
-      
-  return [(found,max_steps)]
+      for step in object["steps"]:
+        if step.get("type",None) == "sink":
+          if "resource" in step and step["resource"] not in ("athena", "store_google_sheet", "email_users_csv", "to_excel"):
+            found.append(step["resource"])
+            break
+        
+  return found
+
+def search(objects):
+
+  for element in objects:
+
+    object = element["object"]
+    
+    if object.get("skip",False):
+      continue
+
+    if object.get("ingest_method", None) == "appended":
+      for step in object.get("steps",[]):
+        if step.get("type",None) == "sink" and step.get("resource",None) == "athena":
+          if step.get("config",{}).get("merge_method", None) == None:
+            print(element["path"])
+            break
+  
 
 directory = "/Users/daniel.nuriyev/projects/data-platform/dagster"
 objects = load(directory)
-results = count_raw(objects)
-
-for result in results:
-  print(result)
-
-print(len(results))
+# results = count_raw(objects)
+# results = count_sinks(objects)
+results = search(objects)
+print(results)
