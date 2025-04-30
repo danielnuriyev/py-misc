@@ -1,6 +1,8 @@
 import os
 import yaml
 
+import bedrock
+
 def load(directory):
  
  parsed_data = []
@@ -82,6 +84,8 @@ def count_sinks(objects):
 
 def search(objects):
 
+  found = []
+
   for element in objects:
 
     object = element["object"]
@@ -89,17 +93,34 @@ def search(objects):
     if object.get("skip",False):
       continue
 
-    if object.get("ingest_method", None) == "appended":
-      for step in object.get("steps",[]):
-        if step.get("type",None) == "sink" and step.get("resource",None) == "athena":
-          if step.get("config",{}).get("merge_method", None) == None:
-            print(element["path"])
-            break
+    if element["source"].find("schedule: 0 0") > -1:
+      found.append(element["file"][:-5])
+
+  return found
+      
+def bedrock_search(objects, question):
+
+  chat = bedrock.Chat("local")
+
+  for element in objects:
+
+    source = element["source"]
+
+    prompt = f"""
+    Do this: {question} regarding this content:
+
+    {source}
+    """
+
   
 
 directory = "/Users/daniel.nuriyev/projects/data-platform/dagster"
 objects = load(directory)
 # results = count_raw(objects)
 # results = count_sinks(objects)
-results = search(objects)
-print(results)
+print(len(search(objects)))
+question = """
+find appended pipelines
+"""
+# bedrock_search(objects, question)
+

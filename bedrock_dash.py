@@ -2,7 +2,6 @@
 import dash
 from dash import dcc, html, Input, Output, State, clientside_callback, callback, no_update, ALL, ctx
 from dash_iconify import DashIconify
-import dash_bootstrap_components as dbc # Import Bootstrap components
 import copy  # Needed to copy style dictionaries
 import uuid  # To generate unique IDs for files
 import json  # For printing data in submit callback (and potentially other uses)
@@ -11,13 +10,10 @@ import zipfile # To handle zip files
 import io # To handle zip files in memory
 import base64 # To decode upload content
 import os # To check file extensions
-import time # For sleep in upload callback
-
-import bedrock
 
 # Initialize the Dash app
 # suppress_callback_exceptions=True is needed for dynamically generated components and multi-output callbacks
-app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 # --- Configuration Constants ---
 
@@ -25,18 +21,13 @@ app = dash.Dash(__name__, suppress_callback_exceptions=True, external_stylesheet
 initial_height_px = 48
 max_height_px = 140
 
-def models(current_chat_id = None):
-    
-    if current_chat_id:
-        _chat = bedrock.Chat(current_chat_id)
-    else:
-        _chat = bedrock.Chat("local")
-
-    model_options = [{"label": "auto", "value": "auto"}]
-    model_options.extend([
-        {"label": model, "value": model} for model in _chat.list_models()
-    ])
-    return model_options
+# Model Options
+model_options = [
+    {'label': 'Gemini Pro', 'value': 'gemini-pro'},
+    {'label': 'Claude 3 Opus', 'value': 'claude-3-opus'},
+    {'label': 'GPT-4 Turbo', 'value': 'gpt-4-turbo'},
+]
+default_model = model_options[0]['value']
 
 # Side Panel Widths
 panel_width_open = '25%'
@@ -82,11 +73,7 @@ previous_chat_item_container_style = {'display': 'flex', 'alignItems': 'center',
 previous_chat_button_style = {'flexGrow': 1, 'padding': '6px 10px', 'border': 'none', 'fontSize': '0.9em', 'cursor': 'pointer', 'textAlign': 'left', 'whiteSpace': 'nowrap', 'overflow': 'hidden', 'textOverflow': 'ellipsis', 'color': '#333', 'backgroundColor': 'transparent', 'borderRadius': '0px'}
 previous_chat_action_button_style = {'border': 'none', 'background': 'none', 'color': '#aaa', 'cursor': 'pointer', 'padding': '5px', 'marginLeft': '2px', 'flexShrink': 0, 'lineHeight': '1'}
 edit_summary_input_style = {'flexGrow': 1, 'padding': '6px 10px', 'fontSize': '0.9em', 'border': '1px solid #007bff', 'borderRadius': '3px', 'marginRight': '5px'}
-chat_container_base_style = {
-    'flexGrow': 1, 'height': '100vh', 'display': 'flex',
-    'flexDirection': 'column', 'transition': transition_style, 'overflow': 'hidden',
-    'justifyContent': 'flex-end'
-}
+chat_container_base_style = {'flexGrow': 1, 'height': '100vh', 'display': 'flex', 'flexDirection': 'column', 'transition': transition_style, 'overflow': 'hidden'}
 chat_container_panel_closed_style = copy.deepcopy(chat_container_base_style)
 chat_interface_style = {'display': 'flex', 'flexDirection': 'column', 'alignItems': 'flex-start', 'width': '70%', 'maxWidth': '900px', 'marginTop': 'auto', 'marginBottom': '20px', 'marginLeft': 'auto', 'marginRight': 'auto', 'height': '100%', 'maxHeight': '100vh'}
 filename_row_style_base = {'display': 'flex', 'flexWrap': 'wrap', 'alignItems': 'center', 'marginTop': '0.2em', 'marginBottom': '0.2em', 'width': '100%'}
@@ -103,7 +90,7 @@ action_icon_button_style = {'border': 'none', 'background': 'none', 'padding': '
 icon_row_style_base = {'display': 'flex', 'alignItems': 'center', 'width': '100%', 'marginTop': '1em'}
 icon_row_style_no_margin = copy.deepcopy(icon_row_style_base); icon_row_style_no_margin['marginTop'] = '0.5em'
 upload_component_style = {'border': 'none', 'padding': '0', 'display': 'inline-block', 'flexShrink': 0}
-dbc_dropdown_style = {'margin-left': '10px', 'margin-right': '1em'} # Adjust spacing as needed
+dropdown_style = {'width': '16ch', 'marginLeft': '10px', 'marginRight': '4ch', 'flexShrink': 0}
 submitted_display_style = {'width': '100%', 'marginBottom': '10px', 'padding': '10px', 'overflowY': 'auto', 'fontSize': '0.95em', 'flexGrow': 1}
 message_entry_style = {'marginBottom': '1.0em'}
 message_qa_row_style = {'display': 'flex', 'alignItems': 'flex-start'}
@@ -115,27 +102,18 @@ message_files_style = {'marginLeft': 'calc(1.8em + 0.6em)', 'marginTop': '0.3em'
 message_filename_style = {'fontSize': '0.85em', 'color': '#555', 'backgroundColor': '#eee', 'padding': '1px 5px', 'borderRadius': '3px', 'border': '1px solid #ddd'}
 deletable_file_item_style = {'display': 'inline-flex', 'alignItems': 'center', 'border': '1px solid #ccc', 'borderRadius': '4px', 'padding': '1px 2px 1px 5px', 'margin': '0', 'fontSize': '0.85em', 'color': '#333', 'backgroundColor': '#f0f0f0'}
 deletable_filename_text_style = {'paddingRight': '0.5ch'}
-model_display_style = {
-    'position': 'absolute', # Position relative to the answer box
-    'bottom': '5px',        # Position it near the bottom
-    'left': '10px',         # Position it from the left
-    'fontSize': '0.8em',
-    'color': '#888',
-    'textAlign': 'left'
-}
+
 
 # --- Define App Layout ---
 # (Layout remains unchanged)
 app.layout = html.Div( # Outermost container
     [
-
         dcc.Store(id='side-panel-state-store', data={'isOpen': False}),
         dcc.Store(id='uploaded-files-store', data=[]),
         dcc.Store(id='message-history-store', data=[]),
         dcc.Store(id='previous-chats-store', data=[], storage_type='local'),
         dcc.Store(id='current-chat-id-store', data=None),
         dcc.Store(id='editing-summary-state-store', data={'editing_chat_id': None}),
-        dcc.Store(id='current-selected-model-store', data=models()[0]['value']), # Store for selected model value
         html.Div(id='dummy-output', style={'display': 'none'}),
         html.Div( # Main Flex Container (Panel + Chat)
             [
@@ -167,21 +145,7 @@ app.layout = html.Div( # Outermost container
                                     html.Div(id='icon-row', children=[
                                         dcc.Upload(id='upload-data', children=html.Div([DashIconify(icon="mdi:paperclip", width=24, color="#555")]), style=upload_component_style, multiple=True, accept=','.join(ALLOWED_EXTENSIONS_UPLOAD)),
                                         html.Div(style={'flexGrow': 1}), # Spacer
-                                        dbc.DropdownMenu(
-                                            id='model-select-dropdown-button', # ID for the button part to update label
-                                            label=models()[0]['value'], # Initial label
-                                            children=[
-                                                dbc.DropdownMenuItem(
-                                                    item['label'],
-                                                    id={'type': 'model-select-item', 'value': item['value']},
-                                                    n_clicks=0 # Needed for input trigger
-                                                ) for item in models()
-                                            ],
-                                            direction="up", # Open upwards
-                                            color="secondary", # Example color, adjust as needed
-                                            size="sm", # Smaller size to fit better
-                                            style=dbc_dropdown_style
-                                        ),
+                                        dcc.Dropdown(id='model-select-dropdown', options=model_options, value=default_model, clearable=False, searchable=False, style=dropdown_style),
                                         html.Button(id='submit-button', children=[DashIconify(icon="mdi:send", width=24)], style=submit_button_style, n_clicks=0)
                                     ], style=icon_row_style_base),
                                 ], style={'width': '100%', 'flexShrink': 0})
@@ -299,8 +263,7 @@ def render_previous_chats(previous_chats_data, editing_state):
     State('current-chat-id-store', 'data'), # Add state back
     prevent_initial_call='initial_duplicate'
 )
-def load_previous_chat(n_clicks, previous_chats_list, current_chat_history, 
-                       current_chat_id):
+def load_previous_chat(n_clicks, previous_chats_list, current_chat_history, current_chat_id):
     # ... (code unchanged - already moves loaded chat to top) ...
     triggered = ctx.triggered_id
     if not triggered or not isinstance(triggered, dict) or triggered.get('type') != 'load-chat-button' or not any(n > 0 for n in n_clicks if n is not None):
@@ -378,6 +341,7 @@ def load_previous_chat(n_clicks, previous_chats_list, current_chat_history,
     prevent_initial_call='initial_duplicate'
 )
 def delete_previous_chat(n_clicks, previous_chats_list):
+    # ... (code unchanged) ...
     triggered = ctx.triggered_id
     if not triggered or not isinstance(triggered, dict) or triggered.get('type') != 'delete-previous-chat' or not any(n > 0 for n in n_clicks if n is not None):
         return no_update
@@ -389,9 +353,6 @@ def delete_previous_chat(n_clicks, previous_chats_list):
     if len(updated_previous_chats) == len(previous_chats_list):
         print(f"Chat ID {chat_id_to_delete} not found for deletion.")
         return no_update
-    
-    _chat = bedrock.Chat(chat_id_to_delete).clear_context()
-
     print(f"Deleted chat with ID: {chat_id_to_delete}")
     return updated_previous_chats
 
@@ -483,6 +444,7 @@ def save_summary_edit(save_n_clicks, input_n_submit, input_values, input_ids, pr
 # --- Remaining Callbacks (Unchanged) ---
 
 # **Callback 1: Handle new file uploads**
+# MODIFIED: Added print statements and refined duplicate check
 @callback(
     Output('uploaded-files-store', 'data', allow_duplicate=True),
     Input('upload-data', 'contents'),
@@ -560,6 +522,7 @@ def handle_uploads(list_of_contents, list_of_names, current_files):
     print(f"Files added in this run: {files_added_this_run}") # DEBUG
     print(f"Returning updated file list: {updated_files_list}") # DEBUG
 
+    # MODIFIED: Always return the list
     return updated_files_list
 
 
@@ -624,18 +587,14 @@ def update_current_file_spacing(stored_files):
     Input('submit-button', 'n_clicks'),
     State('my-textarea', 'value'),
     State('message-history-store', 'data'),
-    State('current-selected-model-store', 'data'),
+    State('model-select-dropdown', 'value'),
     State('uploaded-files-store', 'data'),
     State('previous-chats-store', 'data'),
     State('current-chat-id-store', 'data'),
     prevent_initial_call='initial_duplicate'
 )
-def handle_submit(n_clicks, text_value, current_history, selected_model, 
-                  current_uploaded_files, previous_chats_list, current_chat_id):
+def handle_submit(n_clicks, text_value, current_history, selected_model, current_uploaded_files, previous_chats_list, current_chat_id):
     # ... (code unchanged - already updates previous chats on every submit) ...
-
-    _chat = bedrock.Chat(current_chat_id)
-
     processed_text_value = text_value.strip() if text_value else ""
     previous_chats_output = no_update
     current_chat_id_output = no_update
@@ -643,16 +602,9 @@ def handle_submit(n_clicks, text_value, current_history, selected_model,
         if current_history is None: current_history = []
         if current_uploaded_files is None: current_uploaded_files = []
         associated_filenames = [f['filename'] for f in current_uploaded_files]
-        answer = _chat.ask(processed_text_value)
-        answer_text = answer["text"]
+        answer_text = f"Auto-response for '{processed_text_value}' using {selected_model}." # Placeholder
         if associated_filenames: answer_text += f" (Files: {', '.join(associated_filenames)})"
-        new_entry = {
-            'text': processed_text_value, 
-            'files': associated_filenames, 
-            'answer': answer_text,
-            'cost': answer["cost"],
-            'time': answer["time"],
-            }
+        new_entry = {'text': processed_text_value, 'files': associated_filenames, 'answer': answer_text}
         updated_history = current_history + [new_entry]
         print(f"Submit Question: '{processed_text_value}', Files: {associated_filenames}, Model: '{selected_model}'")
         if updated_history:
@@ -684,13 +636,9 @@ def handle_submit(n_clicks, text_value, current_history, selected_model,
 # **Callback 6: Render message history**
 @callback(
     Output('submitted-text-display', 'children'),
-    Input('message-history-store', 'data'),
-    State('current-chat-id-store', 'data'),
+    Input('message-history-store', 'data')
 )
-def render_message_history(message_list, current_chat_id):
-
-    _chat = bedrock.Chat(current_chat_id)
-
+def render_message_history(message_list):
     # ... (code unchanged) ...
     if not message_list: return []
     message_elements = []
@@ -700,7 +648,6 @@ def render_message_history(message_list, current_chat_id):
         msg = entry.get('text', '')
         files = entry.get('files', [])
         answer = entry.get('answer', '')
-        model_used = entry.get('model_used', 'N/A') # Get the model name
         q_icon_div = html.Div("Q", style=q_box_style)
         question_box_content = [dcc.Markdown(msg)]
         if is_last_message:
@@ -722,15 +669,7 @@ def render_message_history(message_list, current_chat_id):
         answer_row = None
         if answer:
             a_icon_div = html.Div("A", style=a_box_style)
-            current_model = _chat.list_models()[0]
-            context_length = _chat.context_length()
-            cost = entry.get('cost', 0)
-            time = entry.get('time', 0)
-            meta = f"model: {current_model}, context length: {context_length}, cost: ${cost:.3f}, time: {time:.1f}s"
-            answer_box_div = html.Div([
-                dcc.Markdown(answer, id=f"answer-text-{index}", style={'margin': '0', 'padding': '0'}), 
-                html.Div(meta, style=model_display_style), # Display the model name
-                html.Button(id={'type': 'copy-answer-button', 'index': index}, children=[DashIconify(icon="mdi:content-copy", width=16)], style=bottom_right_button_style, n_clicks=0, title="Copy answer to clipboard")], style=answer_box_style)
+            answer_box_div = html.Div([dcc.Markdown(answer, id=f"answer-text-{index}", style={'margin': '0', 'padding': '0'}), html.Button(id={'type': 'copy-answer-button', 'index': index}, children=[DashIconify(icon="mdi:content-copy", width=16)], style=bottom_right_button_style, n_clicks=0, title="Copy answer to clipboard")], style=answer_box_style)
             answer_row = html.Div([a_icon_div, answer_box_div], style={**message_qa_row_style, 'marginTop': '0.5em'})
         message_entry_children = [qa_row]
         if files_row: message_entry_children.append(files_row)
@@ -744,7 +683,7 @@ def render_message_history(message_list, current_chat_id):
     Output('message-history-store', 'data', allow_duplicate=True),
     Input({'type': 'delete-history-file', 'index': ALL, 'filename': ALL}, 'n_clicks'),
     State('message-history-store', 'data'),
-    State('current-selected-model-store', 'data'),
+    State('model-select-dropdown', 'value'),
     prevent_initial_call='initial_duplicate'
 )
 def handle_history_file_delete(n_clicks, current_history, selected_model):
@@ -811,38 +750,13 @@ def handle_edit_message(n_clicks, current_history):
 # **Callback 10: Example callback for dropdown change**
 @callback(
     Output('dummy-output', 'children', allow_duplicate=True),
-    Input('current-selected-model-store', 'data'), # Triggered by store change
-    State('current-chat-id-store', 'data'),
+    Input('model-select-dropdown', 'value'),
     prevent_initial_call='initial_duplicate'
 )
-def update_output_div(selected_value, current_chat_id):
+def update_output_div(selected_value):
     # ... (code unchanged) ...
     print(f"Dropdown value changed to: {selected_value}")
-    _chat = bedrock.Chat(current_chat_id)
-    if selected_value == "auto":
-        _chat.reset_model()
-    else:
-        _chat.set_model(selected_value)
     return None
-
-# ** NEW Callback: Handle Model Selection **
-@callback(
-    Output('current-selected-model-store', 'data'),
-    Output('model-select-dropdown-button', 'label'), # Update button label
-    Input({'type': 'model-select-item', 'value': ALL}, 'n_clicks'),
-    prevent_initial_call=True
-)
-def update_model_selection(n_clicks):
-    """Updates the selected model based on dropdown item clicks."""
-    triggered_id = ctx.triggered_id
-    if not triggered_id or not isinstance(triggered_id, dict) or not any(n > 0 for n in n_clicks if n is not None):
-        return no_update, no_update
-
-    selected_value = triggered_id['value']
-    selected_label = next((item['label'] for item in models() if item['value'] == selected_value), "Select Model")
-
-    print(f"Model selection updated to: {selected_value}")
-    return selected_value, selected_label
 
 # **Clientside Callback: Adjust textarea height**
 clientside_callback(
@@ -921,6 +835,7 @@ clientside_callback(
     prevent_initial_call=True # Don't scroll on initial load
 )
 
+# ** NEW Clientside Callback: Reset Upload Input **
 clientside_callback(
     """
     function(contents) {
@@ -948,62 +863,6 @@ clientside_callback(
     prevent_initial_call=True # Don't run on initial load
 )
 
-clientside_callback(
-    """
-    function(_) { // We don't need the keydown event data itself, just the trigger
-        // Get the textarea element
-        const textarea = document.getElementById('my-textarea');
-        if (!textarea) return window.dash_clientside.no_update; // Exit if textarea not found
-
-        // Define the event handler function
-        const handleEnter = (event) => {
-            // Check if Enter key was pressed WITHOUT the Shift key
-            if (event.key === 'Enter' && !event.shiftKey) {
-                // console.log("Enter pressed without Shift."); // Debug
-
-                // Prevent the default action (adding a new line)
-                event.preventDefault();
-
-                // Find the submit button
-                const submitButton = document.getElementById('submit-button');
-
-                if (submitButton) {
-                    // console.log("Clicking submit button programmatically."); // Debug
-                    // Programmatically click the submit button
-                    submitButton.click();
-                } else {
-                    console.error("Submit button ('submit-button') not found.");
-                }
-            } else {
-                // console.log(`Key pressed: ${event.key}, Shift: ${event.shiftKey}. Allowing default.`); // Debug
-                // Allow default behavior for Shift+Enter or other keys
-            }
-        };
-
-        // --- IMPORTANT ---
-        // Remove existing listener before adding a new one to prevent duplicates
-        // We need a way to reference the *exact same* handler function to remove it.
-        // Store the handler on the element itself or use a more robust event management strategy
-        // if this callback could potentially run multiple times in complex scenarios.
-        // For simplicity here, we assume it runs once or that re-adding is handled okay by browser.
-        // A more robust way:
-        if (textarea._handleEnterListener) {
-             textarea.removeEventListener('keydown', textarea._handleEnterListener);
-        }
-        textarea.addEventListener('keydown', handleEnter);
-        textarea._handleEnterListener = handleEnter; // Store reference for potential removal
-
-
-        // This setup callback doesn't update any Dash components directly
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output('dummy-output', 'children', allow_duplicate=True), # Output to dummy component
-    # Trigger this setup once when the textarea's value changes (e.g., on load or clear)
-    # Using 'value' ensures it runs after the element is likely in the DOM.
-    Input('my-textarea', 'value'),
-    prevent_initial_call='initial_duplicate' # Run on initial load/setup
-)
 
 # --- Run App ---
 if __name__ == '__main__':

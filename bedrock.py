@@ -1,5 +1,6 @@
 import os
 import pickle
+import time
 
 from datetime import datetime
 from typing import List, Dict
@@ -21,7 +22,7 @@ class Bedrock():
 
         # set up the models
         self.models = [
-            Model(key="meta", model_id="meta.llama3-3-70b-instruct-v1:0", in_price=0.00072, out_price=0.00072, in_length=128000, out_length=2048),
+            Model(key="meta", model_id="meta.llama3-70b-instruct-v1:0", in_price=0.00072, out_price=0.00072, in_length=128000, out_length=2048),
             Model(key="mistral", model_id="mistral.mistral-large-2402-v1:0", in_price=0.004, out_price=0.012, in_length=32768, out_length=8192),
             Model(key="amazon", model_id="amazon.nova-pro-v1:0", in_price=0.0008, out_price=0.0032, in_length=300000, out_length=5000),
             Model(key="cohere", model_id="cohere.command-r-plus-v1:0", in_price=0.003, out_price=0.015, in_length=128000, out_length=4096),
@@ -37,6 +38,8 @@ class Bedrock():
         self._client = boto3.client("bedrock-runtime", region_name=os.environ.get('AWS_REGION'))
 
     def call(self, models, context):
+
+        start = time.time()
 
         context_text_length = sum([len(c.text) for c in context])
 
@@ -72,7 +75,11 @@ class Bedrock():
                 cost = in_tokens / 1000.0 * current_model.in_price + out_tokens / 1000.0 * current_model.out_price
                 response_text = response["output"]["message"]["content"][0]["text"].strip()
 
-                return {"text": response_text, "model": current_model.model_id, "cost": cost}
+                return {
+                    "text": response_text, 
+                    "model": current_model.model_id, 
+                    "cost": cost, 
+                    "time": time.time() - start}
             except Exception as e:
                 # Log failure and try the next model
                 print(f"Model {current_model.key} failed at {datetime.now()}: {e}")
