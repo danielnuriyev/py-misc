@@ -1,3 +1,7 @@
+###############################################################
+# Important: use Chat class defined in the bottom of this file
+###############################################################
+
 import os
 import pickle
 import time
@@ -133,6 +137,11 @@ class Context():
         with open('contexts.pkl', 'wb') as f:
             pickle.dump(self._contexts, f)
 
+    def remove_from_context(self, context_id, count):
+        context = self.get_context(context_id)
+        context = context[:-count]
+        self.set_context(context_id, context)
+
     def _get_model(self, context_id):
         if context_id in self._user_models:
             return self._user_models[context_id]
@@ -256,6 +265,9 @@ class Chat():
             raise e
     
     def get_context(self):
+        """
+        Returns a list of ContextItem objects
+        """
         return Chat.context_manager.get_context(self._context_id)
 
     def clear_context(self):
@@ -265,20 +277,35 @@ class Chat():
         return Chat.context_manager.context_length(self._context_id)
     
     def add_to_context(self, text):
+        """
+        Adds additional text to the context such as content of a file
+        """
         text = text.strip()
         context = Chat.context_manager.get_context(self._context_id)
         context.append(ContextItem(text, "in"))
         Chat.context_manager.set_context(self._context_id, context)
+
+    def remove_from_context(self, count):
+        """
+        Removes the last count items from the context
+        """
+        Chat.context_manager.remove_from_context(self._context_id, count)
 
     def list_models(self):
         models = Chat.context_manager.get_models(self._context_id)    
         return [model.key for model in models]
 
     def set_model(self, model):
+        """
+        Sets the model until reset by reset_model
+        """
         if model in Chat.bedrock_client.model_names:
             Chat.context_manager.set_model(self._context_id, model)
         else:
             raise f"Use one of {', '.join(Chat.bedrock_client.model_names)}"
 
     def reset_model(self):
+        """
+        Unless set_model is called, the model will be reset to the cheapest one for the current context length
+        """
         Chat.context_manager.reset_model(self._context_id)
