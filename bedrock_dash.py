@@ -1,4 +1,4 @@
-# Import necessary libraries
+import argparse
 import dash
 from dash import dcc, html, Input, Output, State, clientside_callback, callback, no_update, ALL, ctx
 from dash_iconify import DashIconify
@@ -11,7 +11,6 @@ import zipfile # To handle zip files
 import io # To handle zip files in memory
 import base64 # To decode upload content
 import os # To check file extensions
-import time # For sleep in upload callback
 
 import bedrock
 
@@ -515,11 +514,12 @@ def handle_uploads(list_of_contents, list_of_names, current_files):
         if name is None or content is None:
             continue
 
+        content_type, content_string = content.split(',')
+
         file_lower = name.lower()
         # Check if it's a zip file
         if file_lower.endswith('.zip'):
             try:
-                content_type, content_string = content.split(',')
                 decoded = base64.b64decode(content_string)
                 zip_str = io.BytesIO(decoded)
 
@@ -533,7 +533,11 @@ def handle_uploads(list_of_contents, list_of_names, current_files):
                             # Check against files already present (before this batch + added in this batch)
                             if not any(f['filename'] == qualified_name for f in updated_files_list):
                                 file_id = str(uuid.uuid4())
-                                updated_files_list.append({'filename': qualified_name, 'id': file_id})
+
+                                bytes = zip_ref.read(member_name)
+                                text = bytes.decode('utf-8', errors='ignore')
+
+                                updated_files_list.append({'filename': qualified_name, 'id': file_id, "content": text})
                                 files_added_this_run += 1
                                 print(f"Staged from zip: {qualified_name}")
                             else:
@@ -549,9 +553,14 @@ def handle_uploads(list_of_contents, list_of_names, current_files):
                  # Check against files already present (before this batch + added in this batch)
                  if not any(f['filename'] == name for f in updated_files_list):
                     file_id = str(uuid.uuid4())
-                    updated_files_list.append({'filename': name, 'id': file_id})
+                
+                    decoded_bytes = base64.b64decode(content_string)
+                    decoded_string = decoded_bytes.decode('utf-8', errors='replace')
+
+                    updated_files_list.append({'filename': name, 'id': file_id, "content": decoded_string})
                     files_added_this_run += 1
                     print(f"Staged file: {name}")
+
                  else:
                      print(f"Skipping duplicate file: {name}") # DEBUG
              else:
@@ -634,6 +643,8 @@ def handle_submit(n_clicks, text_value, current_history, selected_model,
                   current_uploaded_files, previous_chats_list, current_chat_id):
     # ... (code unchanged - already updates previous chats on every submit) ...
 
+    print(f"asking: {text_value}")
+
     _chat = bedrock.Chat(current_chat_id)
 
     processed_text_value = text_value.strip() if text_value else ""
@@ -643,6 +654,9 @@ def handle_submit(n_clicks, text_value, current_history, selected_model,
         if current_history is None: current_history = []
         if current_uploaded_files is None: current_uploaded_files = []
         associated_filenames = [f['filename'] for f in current_uploaded_files]
+        for f in current_uploaded_files:
+            content = f.get('content')
+            _chat.add_to_context(content)
         answer = _chat.ask(processed_text_value)
         answer_text = answer["text"]
         if associated_filenames: answer_text += f" (Files: {', '.join(associated_filenames)})"
@@ -745,9 +759,10 @@ def render_message_history(message_list, current_chat_id):
     Input({'type': 'delete-history-file', 'index': ALL, 'filename': ALL}, 'n_clicks'),
     State('message-history-store', 'data'),
     State('current-selected-model-store', 'data'),
+    State('current-chat-id-store', 'data'),
     prevent_initial_call='initial_duplicate'
 )
-def handle_history_file_delete(n_clicks, current_history, selected_model):
+def handle_history_file_delete(n_clicks, current_history, selected_model, current_chat_id):
     # ... (code unchanged - already prints filename) ...
     triggered = ctx.triggered_id
     if not triggered or not isinstance(triggered, dict) or triggered.get('type') != 'delete-history-file' or not any(n > 0 for n in n_clicks if n is not None): return no_update
@@ -758,7 +773,12 @@ def handle_history_file_delete(n_clicks, current_history, selected_model):
     original_text = last_entry.get('text', '')
     original_files = last_entry.get('files', [])
     remaining_files = [f for f in original_files if f != filename_to_delete]
-    new_answer_text = f"Re-answered '{original_text}' using {selected_model}."
+    _chat = bedrock.Chat(current_chat_id)
+    _chat.remove_from_context(len(original_files) + 1)
+    for f in remaining_files:
+            content = f.get('content')
+            _chat.add_to_context(content)
+    new_answer_text = _chat.ask(original_text)["text"]
     if remaining_files: new_answer_text += f" (Files: {', '.join(remaining_files)})"
     else: new_answer_text += " (No files remaining)"
     current_history[-1]['files'] = remaining_files
@@ -1005,6 +1025,5 @@ clientside_callback(
     prevent_initial_call='initial_duplicate' # Run on initial load/setup
 )
 
-# --- Run App ---
-if __name__ == '__main__':
+def __name__():
     app.run(debug=True)
