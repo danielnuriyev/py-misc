@@ -41,8 +41,44 @@ def count_raw(objects):
     if "skip" in object and object["skip"]:
       continue
 
-    # if "ingest_method" in object and object["ingest_method"] in {"reloaded", "appended", "streamed"}:
-    #  continue
+    if "dependencies" in object:
+      continue
+
+    """
+    if object.get("execution", None) != None:
+      if object["execution"].get("capacity", None) == "on_demand":
+          continue
+      elif object["execution"].get("type", None) == "fargate":
+          continue
+    """
+    
+    if "steps" in object:
+      for step in object["steps"]:
+        if step.get("type",None) == "source":
+          if "resource" in step and step["resource"] != "athena_query_extract":
+            # found.append(element["path"])
+            found.append(element["file"][:-5])
+            break
+        if step.get("type",None) == "link" and step.get("op",None) == "create_table":
+          if step.get("config",{}).get("storage_folder",None) != None:
+            # found.append(element["path"])
+            found.append(element["file"][:-5])
+            break
+        
+  return found
+
+def count_sources(objects):
+
+  found = set()
+
+  objects.sort(key=lambda x: x["path"])
+
+  for element in objects:
+
+    object = element["object"]
+    
+    if "skip" in object and object["skip"]:
+      continue
 
     if "dependencies" in object:
       continue
@@ -51,12 +87,30 @@ def count_raw(objects):
       for step in object["steps"]:
         if step.get("type",None) == "source":
           if "resource" in step and step["resource"] != "athena_query_extract":
-            found.append(element["path"])
+            found.add(step["resource"])
             break
         if step.get("type",None) == "link" and step.get("op",None) == "create_table":
           if step.get("config",{}).get("storage_folder",None) != None:
-            found.append(element["path"])
+            found.add("s3")
             break
+        
+  return found
+
+def count_dependent(objects):
+
+  found = []
+
+  objects.sort(key=lambda x: x["path"])
+
+  for element in objects:
+
+    object = element["object"]
+    
+    if "skip" in object and object["skip"]:
+      continue
+
+    if "dependencies" in object:
+      found.append(element["path"])
         
   return found
 
@@ -84,17 +138,26 @@ def count_sinks(objects):
 
 def search(objects):
 
-  found = []
+  found = set()
 
   for element in objects:
 
     object = element["object"]
     
-    if object.get("skip",False):
+    if object.get("skip", False):
       continue
 
-    if element["source"].find("schedule: 0 0") > -1:
-      found.append(element["file"][:-5])
+    """
+    if object.get("execution", None) != None:
+      if object["execution"].get("capacity", None) == "on_demand":
+          continue
+      elif object["execution"].get("type", None) == "fargate":
+          continue
+    """
+
+    found.add(element["file"][:-5])
+
+  return found
 
   return found
       
@@ -112,15 +175,17 @@ def bedrock_search(objects, question):
     {source}
     """
 
-  
 
 directory = "/Users/daniel.nuriyev/projects/data-platform/dagster"
-objects = load(directory)
-# results = count_raw(objects)
-# results = count_sinks(objects)
-print(len(search(objects)))
-question = """
-find appended pipelines
-"""
-# bedrock_search(objects, question)
+results = load(directory)
 
+# results = count_sources(results)
+results = count_raw(results)
+# results = count_dependent(results)
+# results = count_sinks(results)
+# results = search(results)
+
+print(list(results))
+# print(len(results))
+
+# bedrock_search(objects, question)

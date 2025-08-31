@@ -13,7 +13,7 @@ def count(table):
         id = athena.start_query_execution(
             QueryString=sql,
             ResultConfiguration={
-                'OutputLocation': 's3://.../'
+                'OutputLocation': '..'
             },
         )['QueryExecutionId']
 
@@ -45,7 +45,7 @@ def count(table):
 
 if __name__ == "__main__":
     glue = boto3.client('glue')
-    db = "..."
+    db = ".."
     response = glue.get_tables(DatabaseName=db)
     tables = []
     while True:
@@ -60,7 +60,7 @@ if __name__ == "__main__":
         response = glue.get_tables(DatabaseName=db, NextToken=next)
 
     cores =  multiprocessing.cpu_count()
-    print(f"cores: {cores}")
+    print(f"tables: {len(tables)}, cores: {cores}")
     pool = ThreadPoolExecutor(max_workers=cores * 2)
 
     futures = []
@@ -78,9 +78,12 @@ if __name__ == "__main__":
 
     print(f"sorting {len(counts)}")
     counts.sort(key=lambda v: v[1], reverse=True)
+    total_rows = 0
     for i in range(len(counts)):
         r = counts[i]
         t = r[0]
         c = r[1]
+        total_rows += c
         print(f'{i}\t{t}\t{c}')
     print(f"FINISHED ALL {len(tables)} in {int(time.time() - start)} seconds")
+    print(f"TOTAL ROWS: {total_rows}")
